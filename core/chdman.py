@@ -177,9 +177,8 @@ class CHDManWorker(QRunnable):
             if self.force:
                 cmd.append("-f")
                 
-            # Add verbose flag if specified
-            if self.verbose:
-                cmd.append("-v")
+            # Note: verbose flag (-v) is not supported by all CHDMAN commands
+            # and can cause errors, so we're not adding it automatically
                 
             # Add additional parameters
             for key, value in self.kwargs.items():
@@ -639,26 +638,31 @@ class CHDTask:
         hunk_size: Hunk size in bytes
         verify: Whether to verify after operation
         force: Whether to force overwrite of output file
+        media_type: Type of media ("CD", "DVD", or "Hard Disk") (optional)
     """
     
-    def __init__(self, 
-                 task_type: CHDTaskType,
-                 input_file: str,
-                 output_file: Optional[str] = None,
-                 compression_level: str = "normal",
-                 hunk_size: int = 16384,
-                 verify: bool = True,
-                 force: bool = False):
+    def __init__(
+        self,
+        task_type: CHDTaskType,
+        input_file: str,
+        output_file: Optional[str] = None,
+        compression_level: Optional[str] = None,
+        hunk_size: Optional[int] = None,
+        verify: bool = False,
+        force: bool = False,
+        media_type: Optional[str] = None
+    ):
         """Initialize the CHDTask.
         
         Args:
-            task_type: Type of task to execute
-            input_file: Path to input file
-            output_file: Path to output file (if applicable)
-            compression_level: Compression level (none, fast, normal, best)
-            hunk_size: Hunk size in bytes
-            verify: Whether to verify after operation
-            force: Whether to force overwrite of output file
+            task_type: Type of task
+            input_file: Path to the input file
+            output_file: Path to the output file (optional)
+            compression_level: Compression level (optional)
+            hunk_size: Hunk size in bytes (optional)
+            verify: Whether to verify the CHD after operation
+            force: Whether to force the operation
+            media_type: Type of media ("CD", "DVD", or "Hard Disk") (optional)
         """
         self.task_type = task_type
         self.input_file = input_file
@@ -667,6 +671,7 @@ class CHDTask:
         self.hunk_size = hunk_size
         self.verify = verify
         self.force = force
+        self.media_type = media_type
 
 
 class CHDManager:
@@ -686,7 +691,18 @@ class CHDManager:
         self.tasks = []
         self.current_task = None
         self.thread_pool = QThreadPool()
-    
+        
+    def log(self, message):
+        """Log a message.
+        
+        This is a placeholder method that can be overridden by subclasses.
+        By default, it just prints to the console.
+        
+        Args:
+            message: Message to log
+        """
+        print(f"[CHDManager] {message}")
+        
     def add_task(self, task: CHDTask) -> None:
         """Add a task to the queue.
         
@@ -737,34 +753,106 @@ class CHDManager:
         
         # Map task type to CHDMAN command
         if task.task_type == CHDTaskType.COMPRESS:
-            # Determine compression method based on file extension
-            ext = os.path.splitext(task.input_file)[1].lower()
-            if ext in [".iso", ".bin", ".img"]:
-                # Map compression level to algorithm
-                compression = None
-                if task.compression_level == "none":
-                    compression = "none"
-                elif task.compression_level == "fast":
+            # Get media type from task or detect it
+            media_type = None
+            if task.media_type:
+                # Use the media type provided by the task
+                media_type = task.media_type.lower()
+                self.log(f"Using provided media type: {media_type} for file {task.input_file}")
+            else:
+                # Determine media type based on file extension and size
+                ext = os.path.splitext(task.input_file)[1].lower()
+                file_size = os.path.getsize(task.input_file)
+                
+                # Determine media type
+                media_type = "cd"  # Default to CD
+                if ext == ".cue":
+                    media_type = "cd"  # .cue files are typically for CDs
+                elif ext == ".iso":
+                    # For .iso files, use size to determine if it's a DVD
+                    media_type = "cd" if file_size < 734_003_200 else "dvd"  # 700MB threshold
+                elif ext in [".img", ".bin"]:
+                    # For .img and .bin files, could be either CD or DVD
+                    media_type = "cd" if file_size < 734_003_200 else "dvd"
+                
+                self.log(f"Detected media type: {media_type} for file {task.input_file}")
+                
+            # Map compression level to algorithm based on media type
+            compression = None
+            if task.compression_level == "none":
+                compression = "none"
+            elif media_type == "cd":
+                # CD-specific compression algorithms
+                if task.compression_level == "fast":
+                    compression = "cdlz"
+                elif task.compression_level == "normal":
+                    compression = "cdlz,cdzl"
+                elif task.compression_level == "best":
+                    compression = "cdlz,cdzl,cdfl"
+            elif media_type == "dvd":
+                # DVD-specific compression algorithms
+                if task.compression_level == "fast":
                     compression = "zlib"
                 elif task.compression_level == "normal":
-                    compression = "zlib,zstd"
+                    compression = "zlib,huff"
                 elif task.compression_level == "best":
-                    compression = "zlib,lzma"
+                    compression = "lzma"
+            else:  # Hard disk
+                # Hard disk compression algorithms
+                if task.compression_level == "fast":
+                    compression = "zlib"
+                elif task.compression_level == "normal":
+                    compression = "zlib,huff"
+                elif task.compression_level == "best":
+                    compression = "lzma"
                 
+            # Set appropriate hunk size based on media type if not specified
+            hunk_size = task.hunk_size
+            if not hunk_size:
+                if media_type == "cd":
+                    # For CDs, use a hunk size that's a multiple of 2448 (CD sector size)
+                    cd_sector_size = 2448
+                    hunk_size = 2448 * 4  # 9792 bytes - multiple of CD sector size
+                elif media_type == "dvd":
+                    hunk_size = 2048  # Better for some emulators like PPSSPP
+                else:  # Hard disk
+                    hunk_size = 4096  # Default for other types
+            elif media_type == "cd":
+                # For CDs, ensure hunk size is a multiple of 2448
+                cd_sector_size = 2448
+                if hunk_size % cd_sector_size != 0:
+                    # Round up to the next multiple of 2448
+                    hunk_size = ((hunk_size + cd_sector_size - 1) // cd_sector_size) * cd_sector_size
+                    self.log(f"Adjusted hunk size to {hunk_size} to be a multiple of CD sector size {cd_sector_size}")
+                
+            self.log(f"Using compression: {compression} and hunk size: {hunk_size}")
+            
+            # Use the appropriate command based on media type
+            if media_type == "cd":
+                self.log(f"Using createcd command for {task.input_file}")
                 return self.chdman.create_cd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     compression=compression,
-                    hunk_size=task.hunk_size,
+                    hunk_size=hunk_size,  # Use our calculated hunk size
                     force=task.force
                 )
-            else:
-                # Default to CD for other formats
-                return self.chdman.create_cd(
+            elif media_type == "dvd":
+                self.log(f"Using createdvd command for {task.input_file}")
+                return self.chdman.create_dvd(
                     input_file=task.input_file,
                     output_file=task.output_file,
-                    compression=None,
-                    hunk_size=task.hunk_size,
+                    compression=compression,
+                    hunk_size=hunk_size,  # Use our calculated hunk size
+                    force=task.force
+                )
+            else:  # Hard disk or unknown
+                self.log(f"Using createhd command for {task.input_file}")
+                return self.chdman.create_hd(
+                    input_file=task.input_file,
+                    output_file=task.output_file,
+                    compression=compression,
+                    hunk_size=hunk_size,  # Use our calculated hunk size
                     force=task.force
                 )
         elif task.task_type == CHDTaskType.EXTRACT_RAW:
@@ -883,8 +971,8 @@ class CHDManager:
         common_dirs = []
         if os.name == "nt":
             # Windows common directories
-            program_files = os.environ.get("ProgramFiles", "C:\Program Files")
-            program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\Program Files (x86)")
+            program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+            program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
             common_dirs = [
                 os.path.join(program_files, "MAME"),
                 os.path.join(program_files_x86, "MAME"),
