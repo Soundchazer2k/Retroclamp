@@ -5,16 +5,13 @@ using the CHDMAN utility.
 """
 
 import os
-import sys
-from typing import List, Dict, Any, Optional, Tuple
 
-from PySide6.QtCore import Qt, Signal, Slot, QSize, QThread, QRunnable, QThreadPool
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QCheckBox, QGroupBox, QFormLayout,
-    QProgressBar, QSpinBox, QDoubleSpinBox, QTabWidget, QSplitter,
-    QTextEdit, QPlainTextEdit, QScrollArea, QFrame
+    QProgressBar, QSplitter, QPlainTextEdit, QApplication
 )
 
 # Import local modules
@@ -267,7 +264,7 @@ class CompressionTab(QWidget):
         """
         # Enable/disable relevant widgets based on mode
         is_directory = index == 1  # Directory mode
-        is_archive = index == 2    # Archive mode
+        # is_archive = index == 2    # Archive mode - will be used in future implementation
         
         self.filter_edit.setEnabled(is_directory)
         self.include_subdirs_check.setEnabled(is_directory)
@@ -522,17 +519,64 @@ class CompressionTab(QWidget):
         Args:
             tasks: List of (task, row) tuples
         """
-        # TODO: Implement task processing with QThreadPool
-        # For now, just simulate processing
+        # Clear the CHD manager's task queue
+        self.chd_manager.clear_tasks()
+        
+        # Initialize variables for tracking progress
+        self.total_tasks = len(tasks)
+        self.completed_tasks = 0
+        self.current_task_row = None
         
         # Log
         self.log("Compression started.")
         
+        # Process each task sequentially
+        for task, row in tasks:
+            try:
+                # Update status
+                self.files_table.setItem(row, 2, QTableWidgetItem("Processing"))
+                self.current_task_row = row
+                
+                # Get progress bar
+                progress_bar = self.files_table.cellWidget(row, 3)
+                
+                # Add task to CHD manager
+                self.chd_manager.clear_tasks()  # Clear previous tasks
+                self.chd_manager.add_task(task)
+                
+                # Execute task and get signals
+                try:
+                    signals = self.chd_manager.execute_task(task)
+                    
+                    # Connect signals
+                    signals.started.connect(lambda msg, r=row: self.on_task_started(msg, r))
+                    signals.progress.connect(lambda value, msg, r=row: self.on_task_progress(value, msg, r))
+                    signals.finished.connect(lambda success, msg, r=row: self.on_task_finished(success, msg, r))
+                    signals.error.connect(lambda msg, r=row: self.on_task_error(msg, r))
+                    
+                    # Wait for task to complete (this is blocking, but we're processing sequentially)
+                    # In a future version, we could use QThreadPool to process tasks in parallel
+                    while progress_bar.value() < 100 and self.files_table.item(row, 2).text() != "Completed" and self.files_table.item(row, 2).text() != "Failed":
+                        QApplication.processEvents()  # Allow UI updates
+                    
+                except Exception as e:
+                    # Handle any exceptions from task execution
+                    self.on_task_error(str(e), row)
+                
+            except Exception as e:
+                # Handle any other exceptions
+                self.log(f"Error processing task: {str(e)}")
+                self.files_table.setItem(row, 2, QTableWidgetItem("Failed"))
+            
+            # Update overall progress
+            self.completed_tasks += 1
+            self.overall_progress_bar.setValue(self.completed_tasks)
+            self.progress_label.setText(f"Processing {self.completed_tasks}/{self.total_tasks} files...")
+        
         # Update UI when done
         self.scan_btn.setEnabled(True)
         self.compress_btn.setEnabled(True)
-        self.overall_progress_bar.setValue(len(tasks))
-        self.progress_label.setText(f"Completed {len(tasks)}/{len(tasks)} files.")
+        self.progress_label.setText(f"Completed {self.completed_tasks}/{self.total_tasks} files.")
         
         # Log
         self.log("Compression completed.")
@@ -544,3 +588,73 @@ class CompressionTab(QWidget):
             message: Message to add
         """
         self.log_text.appendPlainText(message)
+    
+    @Slot(str, int)
+    def on_task_started(self, message, row):
+        """Handle task started signal.
+        
+        Args:
+            message: Start message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Processing"))
+        
+        # Log
+        self.log(f"Task started: {message}")
+    
+    @Slot(float, str, int)
+    def on_task_progress(self, value, message, row):
+        """Handle task progress signal.
+        
+        Args:
+            value: Progress value (0-100)
+            message: Progress message
+            row: Table row index
+        """
+        # Get progress bar
+        progress_bar = self.files_table.cellWidget(row, 3)
+        
+        # Update progress
+        if value >= 0:
+            progress_bar.setValue(int(value))
+        
+        # Log if message is not empty
+        if message.strip():
+            self.log(message)
+    
+    @Slot(bool, str, int)
+    def on_task_finished(self, success, message, row):
+        """Handle task finished signal.
+        
+        Args:
+            success: Whether the task completed successfully
+            message: Completion message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Completed"))
+        
+        # Update progress to 100%
+        progress_bar = self.files_table.cellWidget(row, 3)
+        progress_bar.setValue(100)
+        
+        # Log
+        self.log(f"Task completed: {message}")
+    
+    @Slot(str, int)
+    def on_task_error(self, message, row):
+        """Handle task error signal.
+        
+        Args:
+            message: Error message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Failed"))
+        
+        # Log
+        self.log(f"Error: {message}")
+        
+        # Show error message
+        QMessageBox.critical(self, "Error", f"Failed to process file:\n{message}")
