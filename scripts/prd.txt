@@ -1,0 +1,102 @@
+# Product Requirements Document (PRD) for Claude Sonnet 3.7 Integration with RetroClamp
+
+**Version:** 1.0
+**Date:** 2025-05-03
+**Author:** ChatGPT
+
+---
+
+## 1. Purpose
+
+Define how Claude Sonnet 3.7 should interact with, generate, and maintain the RetroClamp codebase—utilizing the established architecture, leveraging VS Code extensions, and calling MCP servers where appropriate—to deliver reliable, consistent, and testable code.
+
+## 2. Scope
+
+* Assist in building and extending the RetroClamp scaffold (core/, gui/, modules/, tools/).
+* Produce QSS themes dynamically via `theme_config.py` and `theme_utils.py`.
+* Incorporate Tabler Icons through the `.gitmodules` submodule and `load_svg_icon`.
+* Generate and maintain unit tests under `tests/` for every new feature.
+* Respect coding standards: Black formatting, Ruff linting, pytest for tests.
+* Use Windsurf Tab features and Pylance for autocompletion, jumps, and imports.
+* (Optional) Invoke local MCPs (e.g., Context7, exa/web\_search) for documentation retrieval or web search.
+
+## 3. Stakeholders
+
+* **Primary:** Lead developer (Rene) using Claude Sonnet 3.7 as AI coding assistant.
+* **Secondary:** QA engineers, documentation writers, future open‑source contributors.
+
+## 4. Architecture Overview
+
+1. **Core Modules (`core/`):**
+
+   * `chdman.py`, `archive.py`, `file_scanner.py`, `checkpoint.py`
+2. **GUI Layer (`gui/`):**
+
+   * `main_window.py`, `compression_tab.py`, `metadata_tab.py`, `tools_tab.py`, `theme_editor.py`
+3. **Shared Helpers (`modules/`):**
+
+   * `app_settings.py`, `theme_config.py`, `theme_utils.py`, `ui_functions.py`, `resources_rc.py`
+4. **Standalone Tools (`tools/`):**
+
+   * `theme_studio.py`, `scummvm_generator.py`, etc.
+5. **Resources:**
+
+   * QSS files (`themes/`), Qt resources (`resources/` + Tabler submodule), JSON configs (`config/theme.json`).
+
+## 5. Functional Requirements
+
+1. **Scaffold commands**: Claude must be able to generate or update any file in the scaffold via GitHub (`create_or_update_file`).
+2. **Theme JSON loader**: Update `config/theme.json` entries; regenerate QSS dynamically without manual editing.
+3. **Icon integration**: Add new Tabler icons by name; generate appropriate Python calls.
+4. **Code generation**: Follow stub specifications; never omit docstrings or type hints.
+5. **Unit testing**: For each new function, include a pytest in `tests/` verifying behavior.
+6. **Lint & format**: Ensure all generated code passes `ruff --exit-zero` and `black --check`.
+
+## 6. Non-Functional Requirements
+
+* **Performance:** Generated code should load in under 100 ms in PySide6 main window.
+* **Maintainability:** Follow PEP 8 and project conventions; include comments and docstrings.
+* **Reliability:** Generated tests must pass on every CI run; flakiness < 5%.
+* **Extensibility:** New GUI tabs and tools must slot into existing layout without restructuring.
+
+## 7. Integration Requirements
+
+* **VS Code Extensions:**
+
+  * Black (`mikoz.black-py`) for formatting;
+  * Ruff (`charliermarsh.ruff`) for linting;
+  * Pyright/Pylance (`ms-python.python` + Windsurf Pyright) for type checking;
+  * Code Runner (`formulahendry.code-runner`) for quick script tests;
+  * Windsurf Tab (`codeium.windsurf`) for AI‑driven completions.
+* **MCP Servers:**
+
+  * Context7 for library docs (`resolve-library-id` + `get-library-docs`);
+  * exa/web\_search for ad hoc web lookups;
+  * (Optional) GitHub MCP for repo operations.
+
+## 8. Quality Attributes
+
+| Attribute      | Metric                                                       |
+| -------------- | ------------------------------------------------------------ |
+| Correctness    | 100% of CI tests passing                                     |
+| Readability    | Cyclomatic complexity < 10 per function; code coverage ≥ 80% |
+| Consistency    | Code style violations = 0 (Black & Ruff enforced)            |
+| Responsiveness | UI actions complete within 200 ms                            |
+
+## 9. Release Criteria
+
+* Scaffold generates without errors (`pytest`, `black`, `ruff`).
+* Sample "Compress" tab stub wired into `main.py` and renders correctly.
+* `load_theme_and_icons` applied and Tabler icons load in both dark/light modes.
+* CLI flag `--validate-theme` reports contrast ratios from `theme_utils.py`.
+
+## 10. Next Steps
+
+1. Configure Claude's prompts to reference this PRD and the scaffold doc.
+2. Validate Claude can generate a new core module (`core/chdman.py`) that wraps CHDMAN.
+3. Test Claude's ability to update `tests/test_chdman.py` with a passing pytest.
+4. Iterate: refine instructions until Claude autonomously scaffolds new features reliably.
+
+---
+
+*End of PRD.*
