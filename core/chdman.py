@@ -6,15 +6,48 @@ operations on CHD files with proper progress reporting and error handling.
 """
 
 import os
-import sys
-import subprocess
 import re
-import shlex
+import subprocess
 from enum import Enum, auto
-from typing import Dict, List, Optional, Union, Callable, Tuple, Any
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool
+
+
+class CHDManError(Exception):
+    """Base exception for CHDMAN operations."""
+    pass
+
+
+class CHDManExecutableNotFoundError(CHDManError):
+    """Raised when the CHDMAN executable cannot be found."""
+    pass
+
+
+class CHDManCommandError(CHDManError):
+    """Raised when a CHDMAN command fails.
+    
+    Attributes:
+        command: The command that failed
+        returncode: The return code of the command
+        output: The output of the command
+    """
+    def __init__(self, command: str, returncode: int, output: str):
+        self.command = command
+        self.returncode = returncode
+        self.output = output
+        super().__init__(f"CHDMAN command '{command}' failed with return code {returncode}: {output}")
+
+
+class CHDManInputFileError(CHDManError):
+    """Raised when an input file is invalid or not found."""
+    pass
+
+
+class CHDManOutputFileError(CHDManError):
+    """Raised when an output file cannot be created or written to."""
+    pass
 
 
 @dataclass
@@ -102,6 +135,26 @@ class CHDManWorker(QRunnable):
         It builds the command, executes it, and monitors the progress.
         """
         try:
+            # Check if executable exists
+            if not os.path.exists(self.executable_path) and self.executable_path != "chdman":
+                raise CHDManExecutableNotFoundError(
+                    f"CHDMAN executable not found at {self.executable_path}. "
+                    "Please install CHDMAN and place it in the bin directory."
+                )
+                
+            # Check if input file exists
+            if not os.path.exists(self.input_file):
+                raise CHDManInputFileError(f"Input file not found: {self.input_file}")
+                
+            # Check if output directory exists for commands that require output
+            if self.output_file:
+                output_dir = os.path.dirname(self.output_file)
+                if output_dir and not os.path.exists(output_dir):
+                    try:
+                        os.makedirs(output_dir, exist_ok=True)
+                    except OSError as e:
+                        raise CHDManOutputFileError(f"Cannot create output directory: {output_dir}. {str(e)}")
+            
             # Build command
             cmd = [self.executable_path, self.command]
             
@@ -134,7 +187,8 @@ class CHDManWorker(QRunnable):
                     cmd.extend([f"-{key}", str(value)])
             
             # Emit started signal
-            self.signals.started.emit(f"Running {self.command} on {os.path.basename(self.input_file)}")
+            cmd_str = " ".join(cmd)
+            self.signals.started.emit(f"Running: {cmd_str}")
             
             # Start process
             self.process = subprocess.Popen(
@@ -146,8 +200,13 @@ class CHDManWorker(QRunnable):
                 universal_newlines=True
             )
             
+            # Collect all output for error reporting
+            all_output = []
+            
             # Monitor progress
             for line in iter(self.process.stdout.readline, ""):
+                all_output.append(line.strip())
+                
                 if self.cancelled:
                     self.process.terminate()
                     self.signals.error.emit("Operation cancelled by user")
@@ -163,15 +222,40 @@ class CHDManWorker(QRunnable):
             # Wait for process to complete
             return_code = self.process.wait()
             
+            # Get error output if any
+            stderr_output = self.process.stderr.read().strip()
+            if stderr_output:
+                all_output.append("\nError output:")
+                all_output.append(stderr_output)
+            
             if return_code == 0:
                 self.signals.finished.emit(True, "Operation completed successfully")
             else:
-                error_output = self.process.stderr.read()
-                self.signals.error.emit(f"Process failed with code {return_code}: {error_output}")
+                error_output = "\n".join(all_output)
+                error_message = f"CHDMAN command failed with return code {return_code}"
+                if error_output:
+                    error_message += f":\n{error_output}"
                 
+                # Raise custom exception for error handling
+                cmd_str = " ".join(cmd)
+                raise CHDManCommandError(cmd_str, return_code, error_output)
+                
+        except CHDManError as e:
+            # Handle custom exceptions
+            self.signals.error.emit(str(e))
+        except FileNotFoundError as e:
+            # Handle file not found errors
+            self.signals.error.emit(f"File not found: {str(e)}")
+        except PermissionError as e:
+            # Handle permission errors
+            self.signals.error.emit(f"Permission error: {str(e)}")
+        except OSError as e:
+            # Handle OS errors
+            self.signals.error.emit(f"OS error: {str(e)}")
         except Exception as e:
-            self.signals.error.emit(f"Error executing CHDMAN command: {str(e)}")
-    
+            # Handle other exceptions
+            self.signals.error.emit(f"Error executing CHDMAN: {str(e)}")
+            
     def cancel(self):
         """Cancel the running operation."""
         self.cancelled = True
@@ -623,8 +707,33 @@ class CHDManager:
             
         Returns:
             CHDManSignals object for connecting to signals
+            
+        Raises:
+            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
+            CHDManInputFileError: If an input file is invalid or not found
+            CHDManOutputFileError: If an output file cannot be created or written to
+            CHDManCommandError: If a CHDMAN command fails
         """
         self.current_task = task
+        
+        # Validate input file
+        if not os.path.exists(task.input_file):
+            raise CHDManInputFileError(f"Input file not found: {task.input_file}")
+            
+        # Validate output directory for tasks that require output
+        if task.output_file and task.task_type not in [CHDTaskType.INFO, CHDTaskType.VERIFY]:
+            output_dir = os.path.dirname(task.output_file)
+            if not os.path.exists(output_dir):
+                try:
+                    os.makedirs(output_dir, exist_ok=True)
+                except OSError as e:
+                    raise CHDManOutputFileError(f"Cannot create output directory: {output_dir}. {str(e)}")
+        
+        # Ensure CHDMAN executable is available
+        if self.chdman.executable_path == "chdman":
+            chdman_path = self.find_chdman()
+            if chdman_path:
+                self.chdman.executable_path = chdman_path
         
         # Map task type to CHDMAN command
         if task.task_type == CHDTaskType.COMPRESS:
@@ -697,6 +806,12 @@ class CHDManager:
         
         Returns:
             List of CHDManSignals objects for each task
+            
+        Raises:
+            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
+            CHDManInputFileError: If an input file is invalid or not found
+            CHDManOutputFileError: If an output file cannot be created or written to
+            CHDManCommandError: If a CHDMAN command fails
         """
         if not self.tasks:
             return []
@@ -707,7 +822,24 @@ class CHDManager:
             if chdman_path:
                 self.chdman.executable_path = chdman_path
             else:
-                raise FileNotFoundError("CHDMAN executable not found. Please install CHDMAN and try again.")
+                raise CHDManExecutableNotFoundError(
+                    "CHDMAN executable not found. Please install CHDMAN and place it in the bin directory."
+                )
+        
+        # Validate all tasks before execution
+        for task in self.tasks:
+            # Check if input file exists
+            if not os.path.exists(task.input_file):
+                raise CHDManInputFileError(f"Input file not found: {task.input_file}")
+                
+            # Check if output directory exists for tasks that require output
+            if task.output_file and task.task_type not in [CHDTaskType.INFO, CHDTaskType.VERIFY]:
+                output_dir = os.path.dirname(task.output_file)
+                if not os.path.exists(output_dir):
+                    try:
+                        os.makedirs(output_dir, exist_ok=True)
+                    except OSError as e:
+                        raise CHDManOutputFileError(f"Cannot create output directory: {output_dir}. {str(e)}")
         
         # Execute tasks sequentially
         signals_list = []
@@ -718,44 +850,69 @@ class CHDManager:
             
         return signals_list
     
-    def find_chdman(self) -> Optional[str]:
-        """Find the CHDMAN executable.
+    def find_chdman(self) -> str:
+        """Find CHDMAN executable in bin directory or PATH.
         
         Returns:
-            Path to CHDMAN executable or None if not found
-        """
-        # Check if the executable path is already set and exists
-        if os.path.exists(self.chdman.executable_path) and self.chdman.executable_path != "chdman":
-            return self.chdman.executable_path
-        
-        # Check in the bin directory relative to the application
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        bin_dir = os.path.join(app_dir, "bin")
-        
-        # Check for chdman.exe (Windows) or chdman (Unix)
-        chdman_candidates = [
-            os.path.join(bin_dir, "chdman.exe"),
-            os.path.join(bin_dir, "chdman")
-        ]
-        
-        for candidate in chdman_candidates:
-            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
-                return candidate
-        
-        # Try to find chdman in the PATH
-        try:
-            if sys.platform == "win32":
-                result = subprocess.run(["where", "chdman"], capture_output=True, text=True, check=True)
-            else:  # Unix-like systems
-                result = subprocess.run(["which", "chdman"], capture_output=True, text=True, check=True)
+            Path to CHDMAN executable
             
-            chdman_path = result.stdout.strip().split('\n')[0]
-            if os.path.exists(chdman_path):
-                return chdman_path
-        except subprocess.CalledProcessError:
+        Raises:
+            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
+        """
+        # First, check in the bin directory
+        bin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
+        if os.name == "nt":
+            chdman_path = os.path.join(bin_dir, "chdman.exe")
+        else:
+            chdman_path = os.path.join(bin_dir, "chdman")
+            
+        if os.path.exists(chdman_path) and os.access(chdman_path, os.X_OK):
+            return chdman_path
+            
+        # If not found in bin directory, check PATH
+        try:
+            # Try to run 'chdman' with --help to check if it's in PATH
+            result = subprocess.run(["chdman", "--help"], capture_output=True, text=True, check=False)
+            if result.returncode == 0 or "CHDMAN" in result.stdout:
+                return "chdman"  # Return just the command name if found in PATH
+        except FileNotFoundError:
+            # Not in PATH, continue with search
             pass
             
-        return None
+        # Check common installation directories
+        common_dirs = []
+        if os.name == "nt":
+            # Windows common directories
+            program_files = os.environ.get("ProgramFiles", "C:\Program Files")
+            program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\Program Files (x86)")
+            common_dirs = [
+                os.path.join(program_files, "MAME"),
+                os.path.join(program_files_x86, "MAME"),
+                "C:\\MAME"
+            ]
+        else:
+            # Linux/macOS common directories
+            common_dirs = [
+                "/usr/local/bin",
+                "/usr/bin",
+                "/opt/mame",
+                os.path.expanduser("~/mame")
+            ]
+            
+        for directory in common_dirs:
+            if os.name == "nt":
+                check_path = os.path.join(directory, "chdman.exe")
+            else:
+                check_path = os.path.join(directory, "chdman")
+                
+            if os.path.exists(check_path) and os.access(check_path, os.X_OK):
+                return check_path
+                
+        # If we get here, CHDMAN was not found
+        raise CHDManExecutableNotFoundError(
+            "CHDMAN executable not found. Please install CHDMAN and place it in the bin directory, "
+            "or ensure it's in your system PATH."
+        )
     
     def get_chdman_version(self, executable_path: str) -> Optional[str]:
         """Get the CHDMAN version.
