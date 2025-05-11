@@ -1,17 +1,31 @@
 # RetroClamp Changelog
 
-## [1.1.0-dev] - Development Version
+## [1.2.0-dev] - Development Version
+
+### In Progress
+- Enhanced batch processing capabilities
+- Improved error handling for large batches
+- Multi-threading optimizations for batch operations
+- Better progress reporting for batch tasks
+
+## [1.1.0] - 2025-05-11
 
 ### Added
 - CHDMAN executable integration in bin directory
 - CHDManager batch processing functionality
 - Command-line batch processor tool
 - Setup script for CHDMAN installation
+- Intelligent disc image selection that prioritizes .cue files over .bin files
+- Proper tracking of active workers using the `active_workers` list
+- Overall progress bar showing average completion across all tasks
 
-### In Progress
-- Integration of CHDManager with GUI components
-- Batch processing tab implementation
-- Error handling and progress reporting
+### Fixed
+- Permission error handling for output directories
+- String decoding issues in process output handling
+- Missing progress bar in CompressionTab UI
+- Misleading "ERROR:" prefixes in normal progress messages
+- Duplicate method definitions in CompressionTab class
+- Proper handling of .cue/.bin file pairs to ensure only one task per disc
 
 ## [1.0.0] - 2025-05-04
 

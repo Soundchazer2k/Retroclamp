@@ -5,13 +5,15 @@ A modern GUI for CHDMAN operations, allowing you to compress, decompress, and ma
 ## Current Status
 
 - **Version 1.0.0**: Basic GUI implementation complete with modern interface and theme system
-- **Version 1.1.0-dev**: Currently implementing CHDMAN integration and batch processing
+- **Version 1.1.0**: CHDMAN integration complete with proper worker tracking and intelligent disc image handling
+- **Version 1.2.0-dev**: Currently enhancing batch processing capabilities
 
 See the [CHANGELOG.md](CHANGELOG.md) for detailed version history and the [ROADMAP.md](docs/ROADMAP.md) for development plans.
 
 ## Features
 
 - **Compression**: Convert disk images (ISO, BIN, IMG, etc.) to CHD format for efficient storage
+- **Media-Specific Compression Profiles**: Optimized compression settings for CD, DVD, and hard disk images
 - **Extraction**: Extract disk images from CHD files to various formats
 - **Batch Processing**: Process multiple files in batch mode
 - **Tool Plugins**: Extensible plugin system for additional tools
@@ -52,6 +54,36 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed version history and the [ROADM
    ```
    run_retroclamp.bat
    ```
+
+## Compression Profiles
+
+RetroClamp features optimized compression profiles for different media types and gaming consoles:
+
+### Media-Specific Optimization
+
+- **CD Images**: Uses specialized CD algorithms (cdlz, cdzl, cdfl) with 9.8KB hunk size
+- **DVD Images**: Uses optimized settings for DVD data with 2KB (sector-sized) hunks
+- **Hard Disk Images**: Uses settings optimized for block-based storage with 4KB hunks
+
+Each media type has three profile options:
+
+- **Optimal**: Best compression ratio (slower)
+- **Balanced**: Good balance of speed and compression
+- **Fast**: Fastest compression (larger files)
+
+### Console-Specific Profiles
+
+RetroClamp now automatically detects and applies optimized settings for specific gaming consoles:
+
+- **PlayStation 1**: Optimized CD compression for PS1 games
+- **PlayStation 2**: DVD-specific settings for PS2 games
+- **PSP**: UMD-optimized compression settings
+- **Dreamcast**: GD-ROM specific settings with 8-sector hunks
+- **SEGA CD/Mega CD**: Optimized for SEGA CD games
+- **SEGA Saturn**: Saturn-specific CD compression
+- **TurboGrafx-CD/PC Engine CD**: Optimized for TG-CD games
+
+Console detection is based on file extensions, sizes, and filename patterns. See [README_COMPRESSION_PROFILES.md](README_COMPRESSION_PROFILES.md) for detailed information.
 
 ## Project Structure
 
