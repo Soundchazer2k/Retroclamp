@@ -1,64 +1,99 @@
-# Logs
-logs
+# --- General Python & OS ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.DS_Store
+Thumbs.db
+
+# --- Virtual Environments ---
+venv/
+env/
+ENV/
+
+# --- Build & Distribution ---
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+wheels/
+lib/
+lib64/
+parts/
+sdist/
+var/
+.installed.cfg
+
+# --- Logs & Test Artifacts ---
+logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
+*.pytest_cache/
+.ruff_cache/
 
-# Dependency directories
-node_modules/
-
-# Environment variables
-.env
-.env.example
-
-# Editor directories and files
-.idea/
+# --- Editor/IDE/Project Files ---
 .vscode/
+.idea/
+.roo/
+.cursor/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# OS specific
-.DS_Store
+# --- Environment & Secrets ---
+.env
+.env.*
 
-# Task files
+# --- Node (if present) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+
+# --- Large Binaries & Archives (do not version control) ---
+*.iso
+*.zip
+*.rar
+*.7z
+retrocompressor_project.zip
+tabler-icons.zip
+large.iso
+dummy_input.iso
+expected.iso
+small.iso
+
+# --- Test Data (exclude if not essential) ---
+test_data/
+test_files/
+
+# --- Backup & Experimental Scripts (exclude unless essential) ---
+compression_tab_backup.py
+fix_compression_tab.py
+fix_duplicates.py
+fixed_archive_extraction.py
+temp_scan_method.py
+create_test_dummies.py
+scan_extracted_directory.py
+manual_test.py
+
+# --- Task Master/Project Management ---
 tasks.json
 tasks/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# --- Miscellaneous ---
+*.bak
+*.tmp
 
-# Virtual Environment
-venv/
-env/
-ENV/
-
-# Binary files
-bin/*
+# --- Keep essential binaries/scripts/assets ---
 !bin/README.md
+
+# --- Keep only essential config/assets ---
+# (If you need to include specific files in resources/ or config/, use ! to whitelist them)
+
 
 # Cursor specific
 .cursor/

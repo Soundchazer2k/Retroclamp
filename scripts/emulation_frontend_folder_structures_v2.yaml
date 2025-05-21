@@ -1,0 +1,339 @@
+# EmulationStation-Style (RetroPie, Recalbox, Batocera, EmuELEC, RetroBat)
+frontend: "EmulationStation-Style"
+used_by:
+  - "RetroPie (EmulationStation on Raspberry Pi/Linux)"
+  - "Recalbox"
+  - "Batocera.linux"
+  - "EmuELEC"
+  - "RetroBat (Windows)"
+folders:
+  bios:
+    path: "<BaseDir>/bios/"
+    required: true
+    description: "System BIOS and firmware files directory"
+  roms:
+    path: "<BaseDir>/roms/<System>/"
+    required: true
+    description: "ROM files organized into subfolders by system"
+  saves:
+    path: "<BaseDir>/saves/<System>/"
+    required: false
+    description: "Saved game files (if not stored in emulator-specific configs)"
+  media:
+    path: "<BaseDir>/roms/<System>/[images|videos]/ or <BaseDir>/.emulationstation/"
+    required: false
+    description: "Scraped media (box art, screenshots, video snaps)"
+  gamelists:
+    path: "<BaseDir>/roms/<System>/gamelist.xml or <BaseDir>/.emulationstation/gamelists/<System>.xml"
+    required: false
+    description: "Game metadata XML files"
+  configs:
+    path: "<BaseDir>/configs/<System>/ or <BaseDir>/system/"
+    required: false
+    description: "Emulator configuration files and system settings"
+systems:
+  Atari 2600:
+    folder: atari2600
+    file_extensions: [".a26", ".bin", ".zip"]
+    example_roms: ["Pitfall! (USA).bin", "Space Invaders (Europe).a26"]
+  Atari 5200:
+    folder: atari5200
+    file_extensions: [".a52", ".bin", ".zip"]
+    example_roms: ["Pac-Man (USA).bin"]
+  Atari 7800:
+    folder: atari7800
+    file_extensions: [".a78", ".bin", ".zip"]
+    example_roms: ["Asteroids (USA).a78"]
+  Atari Lynx:
+    folder: lynx
+    file_extensions: [".lnx", ".zip"]
+    example_roms: ["California Games (USA).lnx"]
+  Nintendo Entertainment System:
+    folder: nes
+    file_extensions: [".nes", ".zip", ".7z"]
+    example_roms: ["Super Mario Bros. (USA).nes", "Mega Man 2 (Europe).nes"]
+  Famicom Disk System:
+    folder: fds
+    file_extensions: [".fds", ".zip"]
+    example_roms: ["Zelda no Densetsu (Japan).fds"]
+  Super Nintendo Entertainment System:
+    folder: snes
+    file_extensions: [".smc", ".sfc", ".zip", ".7z"]
+    example_roms: ["Super Mario World (USA).smc"]
+  Nintendo 64:
+    folder: n64
+    file_extensions: [".n64", ".z64", ".v64", ".zip"]
+    example_roms: ["Super Mario 64 (USA).z64"]
+  Nintendo DS:
+    folder: nds
+    file_extensions: [".nds", ".zip"]
+    example_roms: ["Pokémon Diamond (USA).nds"]
+  Nintendo 3DS:
+    folder: 3ds
+    file_extensions: [".3ds", ".cci", ".zip"]
+    example_roms: ["The Legend of Zelda - Ocarina of Time 3D (USA).3ds"]
+  Game Boy:
+    folder: gb
+    file_extensions: [".gb", ".zip"]
+    example_roms: ["Tetris (World).gb"]
+  Game Boy Color:
+    folder: gbc
+    file_extensions: [".gbc", ".zip"]
+    example_roms: ["Pokemon Yellow (USA).gbc"]
+  Game Boy Advance:
+    folder: gba
+    file_extensions: [".gba", ".zip"]
+    example_roms: ["Metroid Fusion (USA).gba"]
+  Sega Master System:
+    folder: mastersystem
+    file_extensions: [".sms", ".zip"]
+    example_roms: ["Sonic the Hedgehog (USA).sms"]
+  Sega Genesis/Mega Drive:
+    folder: megadrive
+    file_extensions: [".bin", ".gen", ".md", ".smd", ".zip"]
+    example_roms: ["Sonic the Hedgehog (USA).bin"]
+  Sega CD/Mega-CD:
+    folder: segacd
+    file_extensions: [".cue", ".iso", ".chd", ".zip"]
+    example_roms: ["Sonic CD (USA).cue"]
+  Sega 32X:
+    folder: sega32x
+    file_extensions: [".32x", ".bin", ".smd", ".zip"]
+    example_roms: ["Knuckles' Chaotix (USA).32x"]
+  Sega Saturn:
+    folder: saturn
+    file_extensions: [".cue", ".iso", ".chd"]
+    example_roms: ["NiGHTS into Dreams... (USA).cue"]
+  Sega Dreamcast:
+    folder: dreamcast
+    file_extensions: [".cdi", ".gdi", ".chd", ".zip"]
+    example_roms: ["SoulCalibur (USA).gdi"]
+  NEC TurboGrafx-16 / PC Engine:
+    folder: pcengine
+    file_extensions: [".pce", ".zip"]
+    example_roms: ["Bonk's Adventure (USA).pce"]
+  NEC TurboGrafx-CD / PC Engine CD:
+    folder: pcenginecd
+    file_extensions: [".cue", ".iso", ".chd"]
+    example_roms: ["Castlevania – Rondo of Blood (Translated).cue"]
+  Neo Geo AES/MVS:
+    folder: neogeo
+    file_extensions: [".zip"]
+    example_roms: ["Metal Slug (World).zip"]
+  Neo Geo Pocket:
+    folder: ngp
+    file_extensions: [".ngp", ".zip"]
+    example_roms: ["SNK vs. Capcom – Match of the Millennium (World).ngp"]
+  Neo Geo Pocket Color:
+    folder: ngpc
+    file_extensions: [".ngc", ".zip"]
+    example_roms: ["Metal Slug – 1st Mission (World).ngc"]
+  Commodore 64:
+    folder: c64
+    file_extensions: [".d64", ".t64", ".crt", ".tap", ".zip"]
+    example_roms: ["Impossible Mission (Europe).d64"]
+  Commodore Amiga:
+    folder: amiga
+    file_extensions: [".adf", ".adz", ".dms", ".hdf", ".zip"]
+    example_roms: ["Lemmings (USA).adf"]
+  MS-DOS:
+    folder: dos
+    file_extensions: [".zip", ".exe", ".com", ".bat"]
+    example_roms: ["DOOM (1993).zip"]
+  ScummVM:
+    folder: scummvm
+    file_extensions: [".scummvm", ".svm"]
+    example_roms: ["Monkey Island 2.scummvm"]
+  Arcade (MAME):
+    folder: mame
+    file_extensions: [".zip", ".7z"]
+    example_roms: ["sf2.zip"]
+
+---
+```yaml
+# LaunchBox / BigBox (Windows, Android)
+frontend: "LaunchBox/BigBox"
+used_by:
+  - "LaunchBox (Windows)"
+  - "LaunchBox (Android)"
+folders:
+  Games:
+    path: "LaunchBox/Games/<Platform>/"
+    required: true
+    description: "ROM files organized by platform"
+  Images:
+    path: "LaunchBox/Images/<Platform>/<ImageType>/"
+    required: false
+    description: "Game images by platform and type"
+  Videos:
+    path: "LaunchBox/Videos/<Platform>/"
+    required: false
+    description: "Game video snaps by platform"
+  Manuals:
+    path: "LaunchBox/Manuals/<Platform>/"
+    required: false
+    description: "Game manuals by platform"
+  Music:
+    path: "LaunchBox/Music/<Platform>/"
+    required: false
+    description: "Platform soundtrack music"
+  PlatformMedia:
+    path: "LaunchBox/Images/Platforms/<Platform>/"
+    required: false
+    description: "Platform artwork (banners, logos)"
+  Data:
+    path: "LaunchBox/Data/Platforms/<Platform>.xml"
+    required: true
+    description: "Per-platform metadata and settings"
+  Emulators:
+    path: "LaunchBox/Emulators/<EmulatorName>/"
+    required: false
+    description: "Optional emulator executables"
+systems:
+  <<: *EmulationStation-Style.systems
+  # folders override full names for LaunchBox:
+  Atari 2600: { folder: "Atari 2600" }
+  Atari 5200: { folder: "Atari 5200" }
+  Atari 7800: { folder: "Atari 7800" }
+  Atari Lynx: { folder: "Atari Lynx" }
+  "Nintendo Entertainment System": { folder: "Nintendo Entertainment System" }
+  "Nintendo Famicom Disk System": { folder: "Nintendo Famicom Disk System" }
+  "Super Nintendo Entertainment System": { folder: "Super Nintendo Entertainment System" }
+  "Nintendo 64": { folder: "Nintendo 64" }
+  "Nintendo DS": { folder: "Nintendo DS" }
+  "Nintendo 3DS": { folder: "Nintendo 3DS" }
+  "Nintendo Game Boy": { folder: "Nintendo Game Boy" }
+  "Nintendo Game Boy Color": { folder: "Nintendo Game Boy Color" }
+  "Nintendo Game Boy Advance": { folder: "Nintendo Game Boy Advance" }
+  "Sega Master System": { folder: "Sega Master System" }
+  "Sega Genesis": { folder: "Sega Genesis" }
+  "Sega Mega Drive": { folder: "Sega Mega Drive" }
+  "Sega CD": { folder: "Sega CD" }
+  "Sega 32X": { folder: "Sega 32X" }
+  "Sega Saturn": { folder: "Sega Saturn" }
+  "Sega Dreamcast": { folder: "Sega Dreamcast" }
+  "NEC TurboGrafx-16": { folder: "NEC TurboGrafx-16" }
+  "NEC PC Engine": { folder: "NEC PC Engine" }
+  "NEC TurboGrafx-CD": { folder: "NEC TurboGrafx-CD" }
+  "SNK Neo Geo": { folder: "SNK Neo Geo" }
+  "SNK Neo Geo Pocket": { folder: "SNK Neo Geo Pocket" }
+  "SNK Neo Geo Pocket Color": { folder: "SNK Neo Geo Pocket Color" }
+  "Commodore 64": { folder: "Commodore 64" }
+  "Commodore Amiga": { folder: "Commodore Amiga" }
+  "Microsoft MS-DOS": { folder: "Microsoft MS-DOS" }
+  ScummVM: { folder: "ScummVM" }
+  Arcade: { folder: "Arcade" }
+---
+
+```yaml
+# HyperSpin (Windows)
+frontend: "HyperSpin"
+used_by:
+  - "HyperSpin 1.5+ (Windows frontend)"
+folders:
+  Media:
+    path: "HyperSpin/Media/<System>/"
+    required: true
+    description: "All media for a given system"
+  Images:
+    path: "HyperSpin/Media/<System>/Images/[Wheel|Artwork1|Artwork2|Backgrounds]/"
+    required: false
+    description: "Artwork subfolders"
+  Themes:
+    path: "HyperSpin/Media/<System>/Themes/"
+    required: false
+    description: "Theme pack ZIPs"
+  Video:
+    path: "HyperSpin/Media/<System>/Video/"
+    required: false
+    description: "Gameplay preview videos"
+  Databases:
+    path: "HyperSpin/Databases/<System>/<System>.xml"
+    required: true
+    description: "XML game list database"
+  Settings:
+    path: "HyperSpin/Settings/<System>.ini"
+    required: true
+    description: "System-specific INI configs"
+  Emulators:
+    path: "HyperSpin/Emulators/<EmulatorName>/"
+    required: false
+    description: "Optional emulator binaries"
+systems:
+  <<: *EmulationStation-Style.systems
+---
+
+```yaml
+# Attract-Mode (Windows/Linux)
+frontend: "Attract-Mode"
+used_by:
+  - "Attract-Mode (Windows/Linux)"
+folders:
+  romlists:
+    path: "<ConfigDir>/romlists/<System>.txt"
+    required: true
+    description: "Game list files per system"
+  layouts:
+    path: "<ConfigDir>/layouts/<LayoutName>/"
+    required: false
+    description: "Theme/layout directories"
+  scraper:
+    path: "<ConfigDir>/scraper/<System>/<ArtworkType>/"
+    required: false
+    description: "Scraped media output"
+  artwork_paths:
+    path: "User-defined per emulator (e.g. D:/Media/<System>/<Type>/)"
+    required: false
+    description: "Custom artwork directories"
+  plugins:
+    path: "<ConfigDir>/plugins/<PluginName>.nut"
+    required: false
+    description: "Optional plugin scripts"
+  modules:
+    path: "<ConfigDir>/modules/<ModuleName>.nut"
+    required: false
+    description: "Optional scripting modules"
+  config_files:
+    path: "<ConfigDir>/attract.cfg or emulators.cfg"
+    required: true
+    description: "Main Attract-Mode config files"
+systems:
+  <<: *EmulationStation-Style.systems
+---
+
+```yaml
+# RetroArch
+frontend: "RetroArch"
+used_by:
+  - "RetroArch"
+folders:
+  system:
+    path: "<BaseDir>/system/"
+    required: true
+    description: "BIOS and firmware files"
+  roms:
+    path: "<BaseDir>/roms/<System>/"
+    required: true
+    description: "ROM files organized by system"
+  saves:
+    path: "<BaseDir>/saves/<System>/"
+    required: false
+    description: "Save files"
+  states:
+    path: "<BaseDir>/states/<System>/"
+    required: false
+    description: "Save state files"
+  playlists:
+    path: "<BaseDir>/playlists/"
+    required: false
+    description: "Core-generated playlists"
+  config:
+    path: "<BaseDir>/config/"
+    required: false
+    description: "RetroArch config files"
+  cores:
+    path: "<BaseDir>/cores/"
+    required: false
+    description: "Libretro core binaries"
+systems:
+  <<: *EmulationStation-Style.systems

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from modules.ui_functions import load_svg_icon
+from version import __version__
 
 
 class FeatureButton(QPushButton):
@@ -158,7 +159,10 @@ class HomeTab(QWidget):
         title_label.setStyleSheet("font-size: 28pt; font-weight: bold;")
         title_version_layout.addWidget(title_label)
         
-        version_label = QLabel("Version 1.1.0-dev")
+        version_display = __version__
+        if not version_display.endswith("-dev"):
+            version_display += "-dev"
+        version_label = QLabel(f"Version {version_display}")
         version_label.setStyleSheet("font-size: 12pt; color: #6272a4;")
         title_version_layout.addWidget(version_label)
         
@@ -187,6 +191,9 @@ class HomeTab(QWidget):
         # Features scroll area
         features_scroll_area = QScrollArea()
         features_scroll_area.setWidgetResizable(True)
+        features_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        features_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        features_scroll_area.setFrameShape(QFrame.NoFrame)  # Remove frame
         
         # Features grid
         features_widget = QWidget()

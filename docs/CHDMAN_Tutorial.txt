@@ -1,0 +1,163 @@
+Tutorial Document: Understanding the CHDMAN Command-Line Utility
+
+Target Audience: An AI model (like Gemini 2.5 Pro) to enhance its knowledge base regarding the chdman command-line tool.
+
+Objective: To provide a clear and structured description of the chdman utility, its purpose, core commands, arguments, and general usage from a command-line perspective.
+Section 1: Introduction to CHDMAN
+
+chdman (Compressed Hunks of Data Manager) is a utility associated with the MAME (Multiple Arcade Machine Emulator) project. Its primary purpose is to create, manage, and work with CHD files. The CHD format is used to store compressed images of various media, most notably optical media like CDs and DVDs, and hard disk drives, commonly for use within emulators to save storage space.
+
+chdman is a command-line program, meaning it is executed by typing commands and arguments into a terminal or command prompt.
+Section 2: Core CHDMAN Commands and Usage
+
+Context for Using CHDMAN:
+
+The primary motivation behind using chdman is typically related to managing large digital archives of media, particularly in the context of video game and computer emulation.
+
+Here are the key reasons why someone would use CHDMAN:
+
+    Storage Space Saving (Compression): This is often the most significant reason. Optical media images (like those from CDs, DVDs) and hard drive images can be very large. The CHD format is designed with efficient compression algorithms specifically suited for the types of data found on these media, often resulting in significantly smaller file sizes compared to raw formats like .iso, .bin/.cue, or raw .img files. This is crucial for users with large collections of games or software they wish to archive.
+
+    File Consolidation and Organization: For CD images, games are often dumped as a .cue file and numerous .bin files (one for each track). This can clutter directories. CHDMAN combines all these into a single .chd file, making the archive much cleaner and easier to manage.
+
+    Standardization for Emulation: The CHD format is widely supported by many emulators, particularly those derived from or associated with MAME (where the format originated), but also increasingly by cores used in frontend emulators like RetroArch for systems like PlayStation, Sega CD, Dreamcast, etc. Using CHD provides a consistent format across different emulators and systems.   
+
+Improved Performance in Some Emulators: In some cases, depending on the emulator and storage medium, using a CHD file can potentially offer faster loading times or better performance compared to using a fragmented set of original files, as the emulator interacts with a single, structured file.
+
+Data Integrity: The CHD format includes built-in checksums. The chdman utility allows users to verify the integrity of a CHD file (chdman verify), ensuring that the data has not been corrupted over time. The chdman info command also provides checksums for reference.  
+
+    Handling Complex Media Layouts: The format is designed to handle the complexities of various media types, including different track types on CDs (data, audio) and the structure of hard disk images, in a consistent container.
+
+In essence, users turn to chdman to transform bulky, multi-file, or uncompressed media dumps into a more compact, single-file format (.chd) that is efficient for storage and widely compatible with emulation software, while also offering integrity checks. When assisting with a GUI application, I should understand that the user is likely trying to simplify these command-line tasks for themselves or others, making the process of compressing/extracting games or verifying files more accessible.
+
+The basic syntax for using chdman is:
+chdman <command> <options>
+
+Here are the most common commands and their essential parameters:
+
+    createcd: Creates a CHD file from a CD-ROM image.
+
+        Input: Typically takes a .cue sheet file (which references one or more .bin files) or sometimes a .iso file.
+
+        Output: Generates a single .chd file.
+
+        Essential Options:
+            -i <input_file> or --input <input_file>: Specifies the path to the input file (e.g., game.cue). Required.
+            -o <output_file> or --output <output_file>: Specifies the path and name for the output .chd file (e.g., game.chd). Required.
+            -c <compression_type>[,<type>...] or --compression <compression_type>[,<type>...]: Sets the compression algorithm(s). Multiple can be specified, comma-separated. Common CD compression types include cdlz, cdzl, cdfl, none. chdman will test the specified algorithms on chunks of data and use the one that provides the best compression for that chunk.
+            -hs <bytes> or --hunksize <bytes>: Defines the size of data "hunks" processed and compressed individually. Specified in bytes. Affects compression ratio and potentially access speed.
+            -f or --force: Overwrite the output file if it already exists without prompting.
+            -v or --verbose: Provides detailed output during the operation, often including progress updates.
+
+        Example: chdman createcd -i "My Game.cue" -o "My Game.chd" -c cdlz,cdfl -hs 8192 -v
+
+    createdvd: Creates a CHD file from a DVD-ROM image.
+
+        Input: Typically takes an .iso file.
+
+        Output: Generates a single .chd file.
+
+        Essential Options: Similar to createcd.
+            -i <input_file>: Input .iso file. Required.
+            -o <output_file>: Output .chd file. Required.
+            -c <compression_type>[,<type>...]: DVD compression types include lzma, zlib, huff, flac, none.
+            -hs <bytes>: Hunk size.
+            -f: Force overwrite.
+            -v: Verbose output.
+
+        Example: chdman createdvd -i "My DVD Game.iso" -o "My DVD Game.chd" -c lzma -v
+
+    createhd: Creates a CHD file from a raw hard disk image.
+
+        Input: A raw hard disk image file.
+
+        Output: Generates a single .chd file.
+
+        Essential Options:
+            -i <input_file>: Input raw image file. Required.
+            -o <output_file>: Output .chd file. Required.
+            -c <compression_type>[,<type>...]: Compression algorithms.
+            -hs <bytes>: Hunk size.
+            -f: Force overwrite.
+            -v: Verbose output.
+            --inputsize <bytes>: Specifies the exact size of the input raw image in bytes. May be required depending on the input file type.
+
+        Example: chdman createhd -i "MyHDD.img" -o "MyHDD.chd" --inputsize 1073741824 -c zlib -v
+
+    extractcd: Extracts data from a CHD file created from a CD image back into its original format.
+
+        Input: A .chd file.
+
+        Output: Typically generates a .cue file and one or more .bin files, or sometimes a single .iso file, depending on the original image structure.
+
+        Essential Options:
+            -i <input_file>: Input .chd file. Required.
+            -o <output_file>: Specifies the path and name for the primary output file (e.g., output.cue or output.iso). Required.
+            -f: Force overwrite.
+            -v: Verbose output.
+
+        Example: chdman extractcd -i "My Game.chd" -o "Extracted Game.cue" -v
+
+    extractdvd: Extracts data from a CHD file created from a DVD image back into its original format.
+
+        Input: A .chd file.
+
+        Output: Typically generates a single .iso file.
+
+        Essential Options: Similar to extractcd.
+            -i <input_file>: Input .chd file. Required.
+            -o <output_file>: Output .iso file. Required.
+            -f: Force overwrite.
+            -v: Verbose output.
+
+        Example: chdman extractdvd -i "My DVD Game.chd" -o "Extracted DVD Game.iso" -v
+
+    extractraw: Extracts data from a CHD file created from a raw hard disk image back into a raw image file.
+
+        Input: A .chd file.
+
+        Output: Generates a raw image file.
+
+        Essential Options: Similar to extractcd.
+            -i <input_file>: Input .chd file. Required.
+            -o <output_file>: Output raw image file. Required.
+            -f: Force overwrite.
+            -v: Verbose output.
+
+        Example: chdman extractraw -i "MyHDD.chd" -o "ExtractedHDD.img" -v
+
+    info: Displays detailed information about an existing CHD file.
+
+        Input: A .chd file.
+
+        Output: Prints information to standard output (the terminal).
+
+        Essential Options:
+            -i <input_file>: Input .chd file. Required.
+            -v: Verbose output (provides more technical details).
+
+        Example: chdman info -i "My Game.chd" -v
+
+    verify: Checks the integrity of a CHD file to ensure it is not corrupted.
+
+        Input: A .chd file.
+
+        Output: Prints verification status to standard output (the terminal) and potentially error details to standard error.
+
+        Essential Options:
+            -i <input_file>: Input .chd file. Required.
+            -v: Verbose output (shows details of the verification process).
+
+        Example: chdman verify -i "My Game.chd" -v
+
+Section 3: General Command-Line Considerations
+
+    Executable Name: The command used to run the utility is typically chdman on Linux/macOS and chdman.exe on Windows. Users must ensure the executable is in their system's PATH or provide the full path to the executable.
+    File Paths: When providing input or output file paths that contain spaces or special characters, the path should be enclosed in double quotes (e.g., "C:\Roms\My Game\My Game.cue").
+    Standard Output (stdout) and Standard Error (stderr): chdman typically writes successful output (like info or progress) to stdout and error messages to stderr. These can be redirected in the command line if needed, but when executed by another program, both streams are typically captured.
+    Return Code: chdman returns an exit code to the operating system when it finishes. A return code of 0 typically indicates successful execution. A non-zero return code indicates that an error occurred.
+
+Section 4: Conclusion
+
+chdman is a powerful command-line tool for managing CHD files for emulation purposes. Understanding its commands, required arguments, and standard options allows users to effectively compress and extract various media images. Its functionality revolves around taking specified input file(s), performing an operation based on the chosen command and options, and producing an output file or reporting information/status.
+

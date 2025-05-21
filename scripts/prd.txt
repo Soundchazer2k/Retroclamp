@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD) for Claude Sonnet 3.7 Integration with RetroClamp
 
-**Version:** 1.0
+**Version:** 1.2.0
 **Date:** 2025-05-03
 **Author:** ChatGPT
 

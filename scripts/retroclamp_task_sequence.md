@@ -1,6 +1,6 @@
 # RetroClamp Development Task Sequence
 
-**Version:** 1.1
+**Version:** 1.2.0
 **Date:** 2025-05-03
 **Author:** Cascade
 

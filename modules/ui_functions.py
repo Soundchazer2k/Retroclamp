@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from PySide6.QtCore import Qt, QSize, QPoint, QRect
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush, QPainterPath, QPalette
-from PySide6.QtWidgets import QWidget, QMainWindow, QPushButton
+from PySide6.QtWidgets import QWidget, QMainWindow, QPushButton, QGraphicsDropShadowEffect
 from PySide6.QtSvg import QSvgRenderer
 
 from modules.theme_config import ThemeConfig
@@ -26,6 +26,9 @@ def load_svg_icon(name: str, size: int = 24, color_hex: str = "#ffffff") -> QIco
     Returns:
         QIcon object with the rendered icon
     """
+    # Create a new QIcon
+    icon = QIcon()
+    
     # Try to load from resources first
     module_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.dirname(module_dir)
@@ -46,174 +49,71 @@ def load_svg_icon(name: str, size: int = 24, color_hex: str = "#ffffff") -> QIco
     
     # If a valid icon path was found, use it
     if icon_path is not None:
-        # Create a transparent pixmap
+        try:
+            # Create a transparent pixmap
+            pix = QPixmap(size, size)
+            pix.fill(Qt.GlobalColor.transparent)
+            
+            # Create a painter for the pixmap
+            painter = QPainter(pix)
+            
+            # Create an SVG renderer
+            renderer = QSvgRenderer(icon_path)
+            
+            # Set up rendering hints
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            
+            # Render the SVG onto the pixmap
+            renderer.render(painter)
+            
+            # Clean up the painter
+            painter.end()
+            
+            # Add the pixmap to the icon
+            icon.addPixmap(pix)
+            
+        except Exception as e:
+            print(f"Error loading SVG icon {name}: {str(e)}")
+            # Fall through to create a fallback icon
+    
+    # If we couldn't load or render the SVG, create a fallback icon
+    if icon.isNull() or icon.pixmap(size, size).isNull():
+        # Create a simple colored square as a fallback
         pix = QPixmap(size, size)
-        pix.fill(Qt.transparent)
+        pix.fill(Qt.GlobalColor.transparent)
         
-        # Render the SVG with the specified color
-        renderer = QSvgRenderer(icon_path)
         painter = QPainter(pix)
         painter.setRenderHint(QPainter.Antialiasing)
-        renderer.render(painter)
-        painter.end()
         
-        return QIcon(pix)
-    
-    # Create a transparent pixmap for fallback icon
-    pix = QPixmap(size, size)
-    pix.fill(Qt.transparent)
-    
-    # Create a painter
-    painter = QPainter(pix)
-    painter.setRenderHint(QPainter.Antialiasing)
-    
-    # Set up common styling
-    pen = QPen(QColor(color_hex))
-    pen.setWidth(2)
-    painter.setPen(pen)
-    painter.setBrush(Qt.NoBrush)
-    
-    # Draw the icon based on name
-    margin = 3
-    inner_size = size - 2 * margin
-    
-    if name == "home":
-        # Home icon - house shape
-        # Roof
-        painter.drawPolygon([
-            QPoint(size // 2, margin),
-            QPoint(margin, size // 2),
-            QPoint(size - margin, size // 2)
-        ])
-        # House body
-        painter.drawRect(
-            margin + inner_size // 4, 
-            size // 2, 
-            inner_size // 2, 
-            inner_size // 2
-        )
-    elif name == "file-plus" or name == "file-export":
-        # File icon - document with folded corner
-        painter.drawLine(size - margin - inner_size // 3, margin, size - margin, margin + inner_size // 3)
-        painter.drawLine(size - margin - inner_size // 3, margin, size - margin - inner_size // 3, margin + inner_size // 3)
-        painter.drawLine(size - margin, margin + inner_size // 3, size - margin - inner_size // 3, margin + inner_size // 3)
+        # Draw a colored square with the first letter of the name
+        color = QColor(color_hex)
+        painter.setPen(color)
+        painter.setBrush(color)
         
-        # File body
-        path = QPainterPath()
-        path.moveTo(margin, margin)
-        path.lineTo(size - margin - inner_size // 3, margin)
-        path.lineTo(size - margin, margin + inner_size // 3)
-        path.lineTo(size - margin, size - margin)
-        path.lineTo(margin, size - margin)
-        path.closeSubpath()
-        painter.drawPath(path)
-        
-        if name == "file-plus":
-            # Plus sign
-            painter.drawLine(
-                size // 2 - inner_size // 4, 
-                size // 2 + inner_size // 8, 
-                size // 2 + inner_size // 4, 
-                size // 2 + inner_size // 8
-            )
-            painter.drawLine(
-                size // 2, 
-                size // 2 - inner_size // 8, 
-                size // 2, 
-                size // 2 + inner_size // 4
-            )
-        elif name == "file-export":
-            # Arrow
-            painter.drawLine(
-                size // 2 - inner_size // 4, 
-                size // 2 + inner_size // 8, 
-                size // 2 + inner_size // 4, 
-                size // 2 + inner_size // 8
-            )
-            painter.drawLine(
-                size // 2 + inner_size // 8, 
-                size // 2, 
-                size // 2 + inner_size // 4, 
-                size // 2 + inner_size // 8
-            )
-            painter.drawLine(
-                size // 2 + inner_size // 8, 
-                size // 2 + inner_size // 4, 
-                size // 2 + inner_size // 4, 
-                size // 2 + inner_size // 8
-            )
-    elif name == "tool":
-        # Tool icon - wrench
-        painter.drawEllipse(margin + inner_size // 4, margin + inner_size // 4, inner_size // 2, inner_size // 2)
-        painter.drawLine(
-            margin + inner_size // 4 + inner_size // 4, 
-            margin + inner_size // 4 + inner_size // 2, 
-            size - margin - inner_size // 4, 
-            size - margin - inner_size // 4
-        )
-    elif name == "list-check":
-        # List with checkmarks
-        # Lines
-        line_spacing = inner_size // 3
-        for i in range(3):
-            y = margin + line_spacing * i + line_spacing // 2
-            painter.drawLine(margin + inner_size // 4, y, size - margin, y)
-            
-            # Checkmarks
-            check_size = line_spacing // 2
-            painter.drawLine(margin, y - check_size // 2, margin + check_size // 2, y)
-            painter.drawLine(margin + check_size // 2, y, margin + check_size, y - check_size)
-    elif name == "menu-2":
-        # Menu icon - three horizontal lines
-        line_spacing = inner_size // 3
-        for i in range(3):
-            y = margin + line_spacing * i + line_spacing // 2
-            painter.drawLine(margin, y, size - margin, y)
-    elif name == "square":
-        # Square icon
-        painter.drawRect(margin, margin, inner_size, inner_size)
-    elif name == "x":
-        # X icon - close
-        painter.drawLine(margin, margin, size - margin, size - margin)
-        painter.drawLine(margin, size - margin, size - margin, margin)
-    elif name == "player-play":
-        # Play icon - triangle
-        painter.setBrush(QBrush(QColor(color_hex)))
-        painter.drawPolygon([
-            QPoint(margin, margin),
-            QPoint(size - margin, size // 2),
-            QPoint(margin, size - margin)
-        ])
-    elif name == "trash":
-        # Trash icon - delete
-        # Trash can body
-        painter.drawRect(margin + inner_size // 6, margin + inner_size // 3, inner_size - inner_size // 3, inner_size - inner_size // 3)
-        # Trash lid
-        painter.drawLine(margin, margin + inner_size // 3, size - margin, margin + inner_size // 3)
-        painter.drawRect(margin + inner_size // 3, margin, inner_size // 3, inner_size // 3)
-        # Lines inside trash
-        for i in range(3):
-            x = margin + inner_size // 6 + inner_size // 6 + i * inner_size // 6
-            painter.drawLine(x, margin + inner_size // 2, x, size - margin - inner_size // 6)
-    else:
-        # Default icon - circle with first letter
-        painter.drawEllipse(margin, margin, inner_size, inner_size)
+        # Draw a circle with the first letter
+        painter.drawEllipse(2, 2, size-4, size-4)
         
         # Add the first letter of the name
         if name:
             font = painter.font()
-            font.setPixelSize(inner_size // 2)
+            font.setPointSize(int(size * 0.6))
             font.setBold(True)
             painter.setFont(font)
             
-            painter.drawText(
-                QRect(margin, margin, inner_size, inner_size),
-                Qt.AlignCenter,
-                name[0].upper()
-            )
+            # Set text color (invert the background color)
+            text_color = QColor(255 - color.red(), 255 - color.green(), 255 - color.blue())
+            painter.setPen(text_color)
+            
+            # Draw the text centered
+            painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, name[0].upper())
+        
+        painter.end()
+        
+        # Add the pixmap to the icon
+        icon.addPixmap(pix)
     
-    painter.end()
-    return QIcon(pix)
+    return icon
 
 
 def apply_theme(window: QMainWindow, theme_config: Optional[Dict[str, Any]] = None) -> None:
@@ -402,8 +302,6 @@ def set_window_shadow(window: QWidget, color: str = "#000000", blur_radius: int 
         blur_radius: Shadow blur radius
         offset: Shadow offset (x, y)
     """
-    from PySide6.QtWidgets import QGraphicsDropShadowEffect
-    
     shadow = QGraphicsDropShadowEffect(window)
     shadow.setBlurRadius(blur_radius)
     shadow.setColor(QColor(color))
@@ -437,8 +335,6 @@ def create_rounded_widget(widget: QWidget, radius: int = 10) -> None:
         widget: Widget to apply rounded corners to
         radius: Corner radius in pixels
     """
-    from PySide6.QtWidgets import QGraphicsDropShadowEffect
-    
     # Set stylesheet for rounded corners
     widget.setStyleSheet(f"""
         border-radius: {radius}px;

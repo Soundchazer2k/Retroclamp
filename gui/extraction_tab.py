@@ -5,21 +5,22 @@ from CHD files using the CHDMAN utility.
 """
 
 import os
-import sys
-from typing import List, Dict, Any, Optional, Tuple
+import shutil
+import zipfile
+import py7zr
 
-from PySide6.QtCore import Qt, Signal, Slot, QSize, QThread, QRunnable, QThreadPool
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QCheckBox, QGroupBox, QFormLayout,
-    QProgressBar, QSpinBox, QDoubleSpinBox, QTabWidget, QSplitter,
-    QTextEdit, QPlainTextEdit, QScrollArea, QFrame
+    QProgressBar, QSplitter, QPlainTextEdit, QApplication
 )
 
 # Import local modules
-from core.chdman import CHDManager, CHDTask, CHDTaskType
+from core.chdman import CHDManager, CHDTask, CHDTaskType, CHDManError
 from core.file_scanner import FileScanner
+from core.archive import ArchiveManager
 from modules.ui_functions import load_svg_icon
 
 
@@ -42,8 +43,17 @@ class ExtractionTab(QWidget):
         # Initialize CHD manager
         self.chd_manager = CHDManager()
         
+        # Initialize archive manager
+        self.archive_manager = ArchiveManager()
+        
         # Initialize file scanner
         self.file_scanner = FileScanner()
+        
+        # Initialize processing state variables
+        self.is_cancelled = False
+        self.total_tasks = 0
+        self.completed_tasks = 0
+        self.current_task_row = None
     
     def setup_ui(self):
         """Set up the user interface."""
@@ -163,17 +173,19 @@ class ExtractionTab(QWidget):
         
         # Action buttons
         action_layout = QHBoxLayout()
-        action_layout.addStretch()
         
-        self.scan_btn = QPushButton("Scan for Files")
-        self.scan_btn.setIcon(load_svg_icon("search", 16, "#f8f8f2"))
-        self.scan_btn.setMinimumWidth(150)
+        self.scan_btn = QPushButton("Scan")
+        self.scan_btn.setIcon(load_svg_icon("search"))
         action_layout.addWidget(self.scan_btn)
         
-        self.extract_btn = QPushButton("Start Extraction")
-        self.extract_btn.setIcon(load_svg_icon("file-export", 16, "#f8f8f2"))
-        self.extract_btn.setMinimumWidth(150)
+        self.extract_btn = QPushButton("Extract")
+        self.extract_btn.setIcon(load_svg_icon("file-export"))
         action_layout.addWidget(self.extract_btn)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setIcon(load_svg_icon("x"))
+        self.cancel_btn.setEnabled(False)  # Disabled by default
+        action_layout.addWidget(self.cancel_btn)
         
         self.top_layout.addLayout(action_layout)
         
@@ -251,6 +263,7 @@ class ExtractionTab(QWidget):
         # Action buttons
         self.scan_btn.clicked.connect(self.scan_files)
         self.extract_btn.clicked.connect(self.start_extraction)
+        self.cancel_btn.clicked.connect(self.cancel_extraction)
     
     @Slot(int)
     def update_input_mode(self, index):
@@ -460,7 +473,8 @@ class ExtractionTab(QWidget):
         # Get extraction options
         output_format = self.output_format_combo.currentIndex()
         verify = self.verify_check.isChecked()
-        metadata_only = self.metadata_only_check.isChecked()
+        # Note: metadata_only is determined by the output format
+        # If output_format is 3 (Dump Metadata), metadata_only is implicitly true
         overwrite = self.overwrite_check.isChecked()
         
         # Determine task type based on output format
@@ -523,6 +537,22 @@ class ExtractionTab(QWidget):
         # Update UI
         self.scan_btn.setEnabled(False)
         self.extract_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        
+        # Disable input controls during extraction
+        self.input_mode_combo.setEnabled(False)
+        self.input_path_edit.setEnabled(False)
+        self.input_browse_btn.setEnabled(False)
+        self.include_subdirs_check.setEnabled(False)
+        self.output_format_combo.setEnabled(False)
+        self.output_dir_edit.setEnabled(False)
+        self.output_browse_btn.setEnabled(False)
+        self.use_same_dir_check.setEnabled(False)
+        self.verify_check.setEnabled(False)
+        self.metadata_only_check.setEnabled(False)
+        self.overwrite_check.setEnabled(False)
+        
+        # Reset progress indicators
         self.overall_progress_bar.setValue(0)
         self.overall_progress_bar.setMaximum(len(tasks))
         self.progress_label.setText(f"Processing 0/{len(tasks)} files...")
@@ -536,20 +566,153 @@ class ExtractionTab(QWidget):
         Args:
             tasks: List of (task, row) tuples
         """
-        # TODO: Implement task processing with QThreadPool
-        # For now, just simulate processing
+        # Clear the CHD manager's task queue
+        self.chd_manager.clear_tasks()
+        
+        # Initialize variables for tracking progress
+        self.total_tasks = len(tasks)
+        self.completed_tasks = 0
+        self.current_task_row = None
+        self.is_cancelled = False
+        
+        # Update UI for processing state
+        self.cancel_btn.setEnabled(True)
         
         # Log
         self.log("Extraction started.")
         
-        # Update UI when done
+        # Process each task sequentially
+        for task, row in tasks:
+            # Check if cancelled
+            if self.is_cancelled:
+                # Mark remaining tasks as cancelled
+                self.files_table.setItem(row, 2, QTableWidgetItem("Cancelled"))
+                continue
+                
+            try:
+                # Update status
+                self.files_table.setItem(row, 2, QTableWidgetItem("Processing"))
+                self.current_task_row = row
+                
+                # Get progress bar
+                progress_bar = self.files_table.cellWidget(row, 3)
+                
+                # Check if the input file is an archive
+                input_file = task.input_file
+                temp_dir = None
+                is_archive = self.archive_manager.is_archive(input_file)
+                
+                if is_archive:
+                    # First, check if the archive potentially contains CHD files
+                    compatible = self.check_archive_compatibility(input_file, row)
+                    
+                    if not compatible:
+                        # Skip this task if the archive doesn't seem to contain CHD files
+                        self.log(f"Skipping archive as it doesn't appear to contain CHD files: {input_file}")
+                        self.files_table.setItem(row, 2, QTableWidgetItem("Skipped (incompatible)"))
+                        continue
+                    
+                    # Extract the archive
+                    success, temp_dir, chd_files = self.extract_archive(input_file, row)
+                    
+                    if not success or not chd_files:
+                        # Skip this task if extraction failed or no CHD files found
+                        continue
+                    
+                    # Update the task with the first CHD file found
+                    task.input_file = chd_files[0]
+                    
+                    # Log the CHD file being processed
+                    self.log(f"Processing CHD file from archive: {os.path.basename(task.input_file)}")
+                    
+                    # If there are multiple CHD files, log them
+                    if len(chd_files) > 1:
+                        self.log(f"Note: {len(chd_files) - 1} additional CHD files found in archive but not processed.")
+                
+                # Add task to CHD manager
+                self.chd_manager.clear_tasks()  # Clear previous tasks
+                self.chd_manager.add_task(task)
+                
+                # Execute task and get signals
+                try:
+                    signals = self.chd_manager.execute_task(task)
+                    
+                    # Connect signals
+                    signals.started.connect(lambda msg, r=row: self.on_task_started(msg, r))
+                    signals.progress.connect(lambda value, msg, r=row: self.on_task_progress(value, msg, r))
+                    signals.finished.connect(lambda success, msg, r=row: self.on_task_finished(success, msg, r))
+                    signals.error.connect(lambda msg, r=row: self.on_task_error(msg, r))
+                    
+                    # Wait for task to complete (this is blocking, but we're processing sequentially)
+                    # In a future version, we could use QThreadPool to process tasks in parallel
+                    max_wait_iterations = 1000  # Prevent infinite loop
+                    wait_iterations = 0
+                    
+                    while (wait_iterations < max_wait_iterations and
+                           not self.is_cancelled and
+                           progress_bar.value() < 100 and
+                           self.files_table.item(row, 2).text() != "Completed" and
+                           self.files_table.item(row, 2).text() != "Failed"):
+                        QApplication.processEvents()  # Allow UI updates
+                        wait_iterations += 1
+                    
+                except CHDManError as e:
+                    # Handle specific CHDManError exceptions
+                    error_message = f"CHDMan error: {str(e)}"
+                    self.on_task_error(error_message, row)
+                except Exception as e:
+                    # Handle any other exceptions from task execution
+                    self.on_task_error(str(e), row)
+                    
+                # Clean up temporary directory if we extracted an archive
+                if is_archive and temp_dir and os.path.exists(temp_dir):
+                    try:
+                        self.log(f"Cleaning up temporary files in {temp_dir}")
+                        shutil.rmtree(temp_dir)
+                    except Exception as e:
+                        self.log(f"Warning: Failed to clean up temporary directory: {str(e)}")
+                
+            except Exception as e:
+                # Handle any other exceptions
+                error_message = f"Error processing task: {str(e)}"
+                self.log(error_message)
+                self.files_table.setItem(row, 2, QTableWidgetItem("Failed"))
+                
+                # Update progress bar to show failure
+                progress_bar = self.files_table.cellWidget(row, 3)
+                if progress_bar:
+                    progress_bar.setValue(0)  # Reset progress bar on failure
+            
+            # Update overall progress
+            self.completed_tasks += 1
+            self.overall_progress_bar.setValue(self.completed_tasks)
+            self.progress_label.setText(f"Processing {self.completed_tasks}/{self.total_tasks} files...")
+        
+        # Re-enable UI controls
         self.scan_btn.setEnabled(True)
         self.extract_btn.setEnabled(True)
-        self.overall_progress_bar.setValue(len(tasks))
-        self.progress_label.setText(f"Completed {len(tasks)}/{len(tasks)} files.")
+        self.cancel_btn.setEnabled(False)
         
-        # Log
-        self.log("Extraction completed.")
+        # Re-enable input controls
+        self.input_mode_combo.setEnabled(True)
+        self.input_path_edit.setEnabled(True)
+        self.input_browse_btn.setEnabled(True)
+        self.include_subdirs_check.setEnabled(self.input_mode_combo.currentIndex() == 1)  # Only if directory mode
+        self.output_format_combo.setEnabled(True)
+        self.output_dir_edit.setEnabled(not self.use_same_dir_check.isChecked())
+        self.output_browse_btn.setEnabled(not self.use_same_dir_check.isChecked())
+        self.use_same_dir_check.setEnabled(True)
+        self.verify_check.setEnabled(True)
+        self.metadata_only_check.setEnabled(self.output_format_combo.currentIndex() != 3)  # Not if metadata mode
+        self.overwrite_check.setEnabled(True)
+        
+        # Update progress label
+        if self.is_cancelled:
+            self.progress_label.setText(f"Cancelled after {self.completed_tasks}/{self.total_tasks} files.")
+            self.log("Extraction cancelled.")
+        else:
+            self.progress_label.setText(f"Completed {self.completed_tasks}/{self.total_tasks} files.")
+            self.log("Extraction completed.")
     
     def log(self, message):
         """Add a message to the log.
@@ -558,3 +721,253 @@ class ExtractionTab(QWidget):
             message: Message to add
         """
         self.log_text.appendPlainText(message)
+    
+    def on_task_started(self, message, row):
+        """Handle task started signal.
+        
+        Args:
+            message: Start message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Processing"))
+        
+        # Log
+        self.log(message)
+    
+    def on_task_progress(self, value, message, row):
+        """Handle task progress signal.
+        
+        Args:
+            value: Progress value (0-100)
+            message: Progress message
+            row: Table row index
+        """
+        # Update progress bar
+        progress_bar = self.files_table.cellWidget(row, 3)
+        if progress_bar:
+            progress_bar.setValue(value)
+        
+        # Log if message is provided
+        if message:
+            self.log(message)
+    
+    def on_task_finished(self, success, message, row):
+        """Handle task finished signal.
+        
+        Args:
+            success: Whether the task was successful
+            message: Completion message
+            row: Table row index
+        """
+        # Update status
+        if success:
+            self.files_table.setItem(row, 2, QTableWidgetItem("Completed"))
+            # Set progress to 100% if not already
+            progress_bar = self.files_table.cellWidget(row, 3)
+            if progress_bar and progress_bar.value() < 100:
+                progress_bar.setValue(100)
+        else:
+            self.files_table.setItem(row, 2, QTableWidgetItem("Failed"))
+        
+        # Log
+        self.log(message)
+    
+    def on_task_error(self, message, row):
+        """Handle task error signal.
+        
+        Args:
+            message: Error message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Failed"))
+        
+        # Log
+        error_message = f"Error: {message}"
+        self.log(error_message)
+    
+    def extract_archive(self, archive_path, row):
+        """Extract an archive file before processing with CHDMAN.
+        
+        Args:
+            archive_path: Path to the archive file
+            row: Table row index
+            
+        Returns:
+            Tuple of (success, extracted_path, files_to_process)
+        """
+        # Create a temporary directory for extraction
+        temp_dir = os.path.join(os.path.dirname(archive_path), f"temp_extract_{os.path.basename(archive_path)}")
+        
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Extracting"))
+        self.log(f"Extracting archive: {archive_path}")
+        
+        try:
+            # Extract the archive
+            signals = self.archive_manager.extract(archive_path, temp_dir)
+            
+            # Connect signals
+            signals.started.connect(lambda msg: self.log(f"[Archive] {msg}"))
+            signals.progress.connect(lambda value, msg: self.on_archive_progress(value, msg, row))
+            signals.error.connect(lambda msg: self.on_archive_error(msg, row))
+            
+            # Wait for extraction to complete
+            extraction_complete = [False]  # Use a list to make it mutable in closures
+            extraction_success = [False]
+            extracted_path = [None]
+            
+            # Connect finished signal with a lambda that captures the results
+            signals.finished.connect(
+                lambda success, msg, path: self.on_archive_finished(success, msg, path, row, extraction_complete, extraction_success, extracted_path)
+            )
+            
+            # Wait for extraction to complete
+            while not extraction_complete[0]:
+                QApplication.processEvents()
+            
+            if not extraction_success[0]:
+                return False, None, []
+            
+            # Find all CHD files in the extracted directory
+            chd_files = []
+            for root, _, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Check if file is a CHD file
+                    if file.lower().endswith(".chd"):
+                        chd_files.append(file_path)
+            
+            if not chd_files:
+                self.log(f"No CHD files found in archive: {archive_path}")
+                return False, temp_dir, []
+            
+            return True, temp_dir, chd_files
+            
+        except Exception as e:
+            self.log(f"Error extracting archive: {str(e)}")
+            self.files_table.setItem(row, 2, QTableWidgetItem("Extraction Failed"))
+            return False, None, []
+    
+    def on_archive_progress(self, value, message, row):
+        """Handle archive extraction progress.
+        
+        Args:
+            value: Progress value (0-100)
+            message: Progress message
+            row: Table row index
+        """
+        # Update progress bar (scale to 0-50 to leave room for CHD extraction)
+        progress_bar = self.files_table.cellWidget(row, 3)
+        if progress_bar:
+            progress_bar.setValue(int(value / 2))
+        
+        # Log if message is provided
+        if message:
+            self.log(f"[Archive] {message}")
+    
+    def on_archive_error(self, message, row):
+        """Handle archive extraction error.
+        
+        Args:
+            message: Error message
+            row: Table row index
+        """
+        # Update status
+        self.files_table.setItem(row, 2, QTableWidgetItem("Extraction Failed"))
+        
+        # Log
+        error_message = f"Archive Error: {message}"
+        self.log(error_message)
+    
+    def on_archive_finished(self, success, message, path, row, completion_flag, success_flag, path_container):
+        """Handle archive extraction completion.
+        
+        Args:
+            success: Whether extraction was successful
+            message: Completion message
+            path: Path to extracted files
+            row: Table row index
+            completion_flag: List with a boolean flag to indicate completion
+            success_flag: List with a boolean flag to indicate success
+            path_container: List to store the extracted path
+        """
+        # Log
+        self.log(f"[Archive] {message}")
+        
+        # Update flags
+        success_flag[0] = success
+        path_container[0] = path
+        completion_flag[0] = True
+    
+    def check_archive_compatibility(self, archive_path, row):
+        """Check if an archive potentially contains CHD files.
+        
+        Args:
+            archive_path: Path to the archive file
+            row: Table row index
+            
+        Returns:
+            Boolean indicating if the archive might contain CHD files
+        """
+        self.log(f"Checking archive compatibility: {archive_path}")
+        self.files_table.setItem(row, 2, QTableWidgetItem("Checking compatibility"))
+        
+        try:
+            # Get the list of files in the archive without extracting
+            file_list = []
+            
+            # Handle different archive types
+            ext = os.path.splitext(archive_path)[1].lower()
+            
+            if ext == ".zip":
+                # List files in ZIP archive
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    file_list = zip_ref.namelist()
+            elif ext == ".7z":
+                # List files in 7z archive
+                with py7zr.SevenZipFile(archive_path, mode='r') as z:
+                    file_list = z.getnames()
+            else:
+                # For other archive types, we can't easily check without extracting
+                # So we'll assume it might contain compatible files
+                self.log(f"Cannot check compatibility for {ext} archives without extracting. Will attempt extraction.")
+                return True
+            
+            # Check if any files in the archive have .chd extension
+            for file_path in file_list:
+                if file_path.lower().endswith(".chd"):
+                    self.log(f"Found CHD file in archive: {file_path}")
+                    return True
+            
+            # No CHD files found
+            self.log(f"No CHD files found in archive: {archive_path}")
+            return False
+            
+        except Exception as e:
+            # If there's an error checking the archive, we'll try extracting it anyway
+            self.log(f"Error checking archive compatibility: {str(e)}. Will attempt extraction.")
+            return True
+    
+    @Slot()
+    def cancel_extraction(self):
+        """Cancel the extraction process."""
+        if self.current_task_row is not None:
+            # Set cancelled flag
+            self.is_cancelled = True
+            
+            # Try to cancel the current task
+            try:
+                self.chd_manager.cancel_task()
+                self.log("Cancelling extraction... Please wait for current task to finish.")
+                
+                # Update status of current task
+                self.files_table.setItem(self.current_task_row, 2, QTableWidgetItem("Cancelling"))
+                
+                # Disable cancel button to prevent multiple clicks
+                self.cancel_btn.setEnabled(False)
+            except Exception as e:
+                self.log(f"Error cancelling task: {str(e)}")
+                # Still set cancelled flag to prevent new tasks from starting
+                self.is_cancelled = True

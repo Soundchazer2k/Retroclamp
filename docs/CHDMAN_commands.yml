@@ -1,0 +1,495 @@
+# Description: Comprehensive data structure describing the CHDMAN command-line utility for use by an AI model.
+# This data covers common and less common command names, descriptions, expected input/output, and arguments.
+
+chdman_commands:
+  - name: createcd
+    description: Creates a CHD file from a CD-ROM image (typically .cue + .bin or .iso).
+    input_files:
+      - ".cue" # Usually paired with .bin files
+      - ".iso"
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Specifies the path to the input file (e.g., .cue or .iso).
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: "For BIN/CUE images, specify the .cue file."
+      - flags: ["-o", "--output"]
+        description: Specifies the path and name for the output .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-c", "--compression"]
+        description: Sets the compression algorithm(s). Multiple can be specified, comma-separated.
+        required: false
+        takes_value: true
+        value_type: list_of_strings # e.g., cdlz,cdfl
+        notes: "Common CD types: cdlz, cdzl, cdfl, none. chdman tests specified algorithms per hunk."
+      - flags: ["-hs", "--hunksize"]
+        description: Defines the size of data 'hunks' in bytes.
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: "Often a power of 2 (e.g., 8192, 16384, 32768). Affects compression and access speed."
+      - flags: ["-f", "--force"]
+        description: Overwrite the output file if it already exists without prompting.
+        required: false
+        takes_value: false
+        value_type: boolean # Presence of flag means true
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: "Useful for monitoring progress, shows percentage complete if supported."
+
+  - name: createdvd
+    description: Creates a CHD file from a DVD-ROM image (typically .iso).
+    input_files:
+      - ".iso"
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Specifies the path to the input .iso file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Specifies the path and name for the output .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-c", "--compression"]
+        description: Sets the compression algorithm(s).
+        required: false
+        takes_value: true
+        value_type: list_of_strings # e.g., lzma
+        notes: "Common DVD types: lzma, zlib, huff, flac, none."
+      - flags: ["-hs", "--hunksize"]
+        description: Defines the size of data 'hunks' in bytes.
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: "For PPSSPP, 2048 is sometimes recommended."
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: createhd
+    description: Creates a CHD file from a raw hard disk image.
+    input_files:
+      - "raw_image" # e.g., .img, .bin
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input raw image file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-c", "--compression"]
+        description: Sets the compression algorithm(s).
+        required: false
+        takes_value: true
+        value_type: list_of_strings
+        notes: "Common types: lzma, zlib, huff, flac, none."
+      - flags: ["-hs", "--hunksize"]
+        description: Defines the size of data 'hunks' in bytes.
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: null
+      - flags: ["--inputsize"]
+        description: Specifies the exact size of the input raw image in bytes.
+        required: false # May be required depending on input type
+        takes_value: true
+        value_type: integer
+        notes: "Sometimes needed for raw images without size metadata."
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: extractcd
+    description: Extracts data from a CHD file (originally a CD image) back into its original format.
+    input_files:
+      - ".chd"
+    output_files:
+      - ".cue" # Paired with .bin files
+      - ".iso"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the primary output file (e.g., .cue or .iso).
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: "Specify the desired name and extension (.cue or .iso). Will generate associated .bin files for .cue."
+      - flags: ["-f", "--force"]
+        description: Overwrite output file(s) if they exist.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: extractdvd
+    description: Extracts data from a CHD file (originally a DVD image) back into its original format.
+    input_files:
+      - ".chd"
+    output_files:
+      - ".iso"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output .iso file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: extractraw
+    description: Extracts data from a CHD file (originally a raw hard disk image) back into a raw image file.
+    input_files:
+      - ".chd"
+    output_files:
+      - "raw_image" # e.g., .img, .bin
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output raw image file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: info
+    description: Displays detailed information about a CHD file to standard output.
+    input_files:
+      - ".chd"
+    output_files: [] # Output is printed to stdout
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide more technical details in the output (e.g., hunk compression breakdown, metadata).
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: verify
+    description: Checks the integrity of a CHD file. Reports status and errors to standard output/error.
+    input_files:
+      - ".chd"
+    output_files: [] # Output is printed to stdout/stderr
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the verification process.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  # Less Common Commands
+
+  - name: copy
+    description: Copies data from one CHD to another, allowing changes in version, compression, or hunk size. Can handle parent/child relationships.
+    input_files:
+      - ".chd"
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the source .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the new destination .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-ip", "--inputparent"]
+        description: Path to the parent CHD of the input file (if it's a delta CHD).
+        required: false
+        takes_value: true
+        value_type: file_path
+        notes: "Required if input CHD is a delta file."
+      - flags: ["-op", "--outputparent"]
+        description: Path to the parent CHD for the output file (to create a delta CHD).
+        required: false
+        takes_value: true
+        value_type: file_path
+        notes: "Specify to create a delta output CHD."
+      - flags: ["-c", "--compression"]
+        description: Sets the compression algorithm(s) for the new CHD.
+        required: false
+        takes_value: true
+        value_type: list_of_strings
+        notes: "Compression types depend on the media type (CD, DVD, HD)."
+      - flags: ["-hs", "--hunksize"]
+        description: Defines the hunk size for the new CHD.
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: null
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output during the operation.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: addmeta
+    description: Adds metadata to a CHD file. Requires specifying a tag, value, and optionally an index.
+    input_files:
+      - ".chd"
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output .chd file (often the same as input to modify in place).
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: "Usually the same file as the input to modify it."
+      - flags: ["-t", "--tag"]
+        description: The 4-character metadata tag.
+        required: true
+        takes_value: true
+        value_type: string # 4 characters
+        notes: "Must be exactly 4 characters."
+      - flags: ["-ix", "--index"]
+        description: The index of the metadata entry (for tags with multiple entries).
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: "Optional; used if multiple entries exist for a single tag."
+      - flags: ["-vt", "--valuetext"]
+        description: The metadata value as text string.
+        required: false # Required if -vf is not used
+        takes_value: true
+        value_type: string
+        notes: "Use either -vt or -vf."
+      - flags: ["-vf", "--valuefile"]
+        description: The metadata value from a file.
+        required: false # Required if -vt is not used
+        takes_value: true
+        value_type: file_path
+        notes: "Use either -vt or -vf. Useful for binary metadata."
+      - flags: ["-nocs", "--nochecksum"]
+        description: Do not perform checksum verification on metadata.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: delmeta
+    description: Deletes metadata from a CHD file based on tag and optional index.
+    input_files:
+      - ".chd"
+    output_files:
+      - ".chd"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output .chd file (often the same as input to modify in place).
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: "Usually the same file as the input to modify it."
+      - flags: ["-t", "--tag"]
+        description: The 4-character metadata tag to delete.
+        required: true
+        takes_value: true
+        value_type: string # 4 characters
+        notes: "Must be exactly 4 characters."
+      - flags: ["-ix", "--index"]
+        description: The index of the metadata entry to delete (for tags with multiple entries).
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: "Optional; if omitted, all entries for the tag are deleted."
+      - flags: ["-f", "--force"]
+        description: Overwrite output file if it exists.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: dumpmeta
+    description: Extracts metadata from a CHD file to standard output or a specified file.
+    input_files:
+      - ".chd"
+    output_files:
+      - "stdout" # Default
+      - "file"
+    arguments:
+      - flags: ["-i", "--input"]
+        description: Path to the input .chd file.
+        required: true
+        takes_value: true
+        value_type: file_path
+        notes: null
+      - flags: ["-o", "--output"]
+        description: Path and name for the output file to save metadata.
+        required: false # If omitted, output goes to stdout
+        takes_value: true
+        value_type: file_path
+        notes: "If omitted, metadata is printed to the console."
+      - flags: ["-t", "--tag"]
+        description: The 4-character metadata tag to dump.
+        required: false # If omitted, all metadata is dumped
+        takes_value: true
+        value_type: string # 4 characters
+        notes: "Optional; must be exactly 4 characters if used."
+      - flags: ["-ix", "--index"]
+        description: The index of the metadata entry to dump.
+        required: false
+        takes_value: true
+        value_type: integer
+        notes: "Optional; used if dumping a specific entry for a tag."
+      - flags: ["-v", "--verbose"]
+        description: Provide detailed output.
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: null
+
+  - name: listtemplates
+    description: Lists available metadata templates recognized by chdman to standard output.
+    input_files: [] # Does not operate on a specific file
+    output_files: ["stdout"]
+    arguments:
+      # No arguments specific to file operations for this command
+      # Some utilities might support -v for more details, but not consistently documented for this command.
+      # Including a generic verbose option for consistency, though its effect might be minimal or none.
+      - flags: ["-v", "--verbose"]
+        description: Provide more detailed output (if supported for this command).
+        required: false
+        takes_value: false
+        value_type: boolean
+        notes: "Effectiveness may vary for this specific command."

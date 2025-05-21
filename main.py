@@ -345,27 +345,24 @@ class MainWindow(QMainWindow):
         # Pages
         self.pages = QStackedWidget()
         self.pages.setObjectName("pages")
+        # Prevent scrollbars from appearing when resizing
+        self.pages.setFrameShape(QFrame.NoFrame)  # Remove frame
+        self.pages.setLineWidth(0)  # No border
         
         # Home page
         self.home_page = HomeTab()
         self.home_page.setObjectName("homePage")
         self.pages.addWidget(self.home_page)
         
-        # Compression page
-        self.compression_page = CompressionTab()
+        # Compression page with tabs
+        self.compression_page = QTabWidget()
         self.compression_page.setObjectName("compressionPage")
-        self.pages.addWidget(self.compression_page)
+        # Prevent scrollbars from appearing when resizing
+        self.compression_page.setDocumentMode(True)  # More compact appearance
+        self.compression_page.setUsesScrollButtons(False)  # Disable scroll buttons
         
-        # Extraction page
-        self.extraction_page = ExtractionTab()
-        self.extraction_page.setObjectName("extractionPage")
-        self.pages.addWidget(self.extraction_page)
-        
-        # Tools page
-        self.tools_page = QTabWidget()
-        self.tools_page.setObjectName("toolsPage")
         # Add the same tab styling as in settings_tab.py
-        self.tools_page.setStyleSheet("""
+        self.compression_page.setStyleSheet("""
             QTabBar::tab {
                 padding: 8px 16px;
                 margin-right: 2px;
@@ -385,6 +382,25 @@ class MainWindow(QMainWindow):
                 top: -1px;                     /* overlap with tabs */
             }
         """)
+        
+        # Add single file compression tab
+        self.single_file_tab = CompressionTab()
+        self.compression_page.addTab(self.single_file_tab, "Single File")
+        
+        # Add batch processing tab
+        self.batch_tab = BatchTab()
+        self.compression_page.addTab(self.batch_tab, "Batch Processing")
+        
+        self.pages.addWidget(self.compression_page)
+        
+        # Extraction page
+        self.extraction_page = ExtractionTab()
+        self.extraction_page.setObjectName("extractionPage")
+        self.pages.addWidget(self.extraction_page)
+        
+        # Tools page
+        from gui.tools_tab import ToolsTab
+        self.tools_page = ToolsTab()
         self.pages.addWidget(self.tools_page)
         
         # Theme page
@@ -397,10 +413,7 @@ class MainWindow(QMainWindow):
         self.settings_page.setObjectName("settingsPage")
         self.pages.addWidget(self.settings_page)
         
-        # Batch page
-        self.batch_page = BatchTab()
-        self.batch_page.setObjectName("batchPage")
-        self.pages.addWidget(self.batch_page)
+        # Batch page is now included as a tab in the compression page
         
         # Add pages to content inner layout
         self.content_inner_layout.addWidget(self.pages)
@@ -446,7 +459,7 @@ class MainWindow(QMainWindow):
         self.connect_home_signals()
         
         # Set up tools page
-        self.setup_tools_page()
+        # self.setup_tools_page()
     
     def connect_home_signals(self):
         """Connect home page signals."""
@@ -456,17 +469,10 @@ class MainWindow(QMainWindow):
         self.home_page.tools_clicked.connect(lambda: self.change_page(self.tools_page))
         self.home_page.batch_clicked.connect(lambda: self.change_page(self.batch_page))
     
-    def setup_tools_page(self):
-        """Set up the tools page."""
-        # Import tool manager
-        from tools import ToolManager
-        
-        # Create tool manager
-        self.tool_manager = ToolManager()
-        
-        # Discover and load plugins
-        self.tool_manager.discover_plugins()
-        self.tool_manager.load_plugins(self.tools_page)
+    # def setup_tools_page(self):
+    #     """Set up the tools page."""
+    #     # Plugin system removed in favor of direct ToolsTab integration.
+    #     pass
     
     def connect_signals(self):
         """Connect widget signals to slots."""
@@ -512,8 +518,7 @@ class MainWindow(QMainWindow):
             self.extraction_page: self.btn_extract,
             self.tools_page: self.btn_tools,
             self.theme_page: self.btn_theme,
-            self.settings_page: self.btn_settings,
-            self.batch_page: self.btn_compress  # Use compress button for batch page since it's related
+            self.settings_page: self.btn_settings
         }
         
         # Get button for current page
@@ -709,12 +714,15 @@ class MainWindow(QMainWindow):
                 if hasattr(self, '_resize_start_size'):
                     delattr(self, '_resize_start_size')
                 return True
-        
         # Pass the event to the parent class
         return super().eventFilter(obj, event)
     
     def closeEvent(self, event):
-        """Handle close events.
+        """Handle application close event.
+        
+        This method is called when the application is closed. It ensures that
+        all temporary directories are cleaned up and all CHDMAN processes are
+        terminated.
         
         Args:
             event: Close event
@@ -733,6 +741,34 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.No:
                 event.ignore()
                 return
+                
+        # Log the close event with a very visible message
+        print("\n\n***** APPLICATION CLOSING - CLEANUP STARTING *****\n\n")
+        
+        # Clean up temporary directories in the compression tab
+        if hasattr(self, 'single_file_tab') and self.single_file_tab:
+            print("Cleaning up compression tab resources...")
+            try:
+                self.single_file_tab.cleanup_temp_directories()
+                print("Compression tab cleanup completed successfully")
+            except Exception as e:
+                print(f"ERROR during compression tab cleanup: {str(e)}")
+                
+        # Terminate any running CHDMAN processes
+        try:
+            if hasattr(self, 'single_file_tab') and self.single_file_tab:
+                self.single_file_tab.chd_manager.terminate_all_chdman_processes()
+                print("CHDMAN processes terminated successfully")
+        except Exception as e:
+            print(f"ERROR terminating CHDMAN processes: {str(e)}")
+        
+        # Clean up resources
+        print("Application closing, cleaning up resources...")
+        
+        # Clean up compression tab resources (temp directories and CHDMAN processes)
+        if hasattr(self, 'compression_tab') and self.compression_tab:
+            print("Cleaning up compression tab resources...")
+            self.compression_tab.cleanup()
         
         # Save settings
         if hasattr(SETTINGS, 'save'):
@@ -741,6 +777,30 @@ class MainWindow(QMainWindow):
         # Call parent method
         super().closeEvent(event)
 
+
+import traceback
+
+def log_uncaught_exception(exc_type, exc_value, exc_traceback):
+    # Log to error.log
+    with open('error.log', 'a', encoding='utf-8') as f:
+        f.write('\n--- Uncaught Exception ---\n')
+        traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+    # Also print to stderr
+    traceback.print_exception(exc_type, exc_value, exc_traceback)
+    # Show a message box if possible
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle('Application Error')
+        msg.setText('An unexpected error occurred. See error.log for details.')
+        msg.setDetailedText(''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
+        msg.exec()
+    except Exception:
+        pass
+
+import sys
+sys.excepthook = log_uncaught_exception
 
 def main():
     """Main entry point for the application."""

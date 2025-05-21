@@ -1,0 +1,10 @@
+chdman - MAME Compressed Hunks of Data (CHD) manager 0.276 (mame0276)
+Usage:
+   H:\Vibe Coding\Retrocompressor\bin\chdman.exe createcd [options], where valid options are:
+      --output, -o <filename>: output file name (required)
+      --outputparent, -op <filename>: parent file name for output CHD
+      --force, -f: force overwriting an existing file
+      --input, -i <filename>: input file name (required)
+      --hunksize, -hs <bytes>: size of each hunk, in bytes
+      --compression, -c <none|type1[,type2[,...]]>: which compression codecs to use (up to 4)
+      --numprocessors, -np <processors>: limit the number of processors to use during compression

@@ -6,10 +6,12 @@ based on extensions, with support for drag-and-drop operations.
 
 import os
 import fnmatch
-from typing import Dict, List, Optional, Set, Callable, Tuple, Any
+from typing import List, Optional
 from dataclasses import dataclass
+from datetime import datetime
+import traceback
 
-from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool, QMimeData, QUrl
+from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool, QMimeData
 
 
 @dataclass
@@ -83,8 +85,22 @@ class ScannerWorker(QRunnable):
         This method is called when the worker is started by the thread pool.
         It scans the specified directory and reports results.
         """
+        # Log all key paths and operation info to error.log (for debugging)
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[ScannerWorker] Starting run at: {datetime.now()}\n")
+                logf.write(f"  Path: {self.path}\n")
+                logf.write(f"  Recursive: {self.recursive}\n")
+                logf.write(f"  Include extensions: {self.include_extensions}\n")
+                logf.write(f"  Exclude extensions: {self.exclude_extensions}\n")
+                logf.write(f"  Exclude patterns: {self.exclude_patterns}\n")
+        except Exception as logex:
+            print(f"[ScannerWorker] Failed to log start: {logex}")
+        
         try:
             if not os.path.exists(self.path):
+                with open('error.log', 'a', encoding='utf-8') as logf:
+                    logf.write(f"[ScannerWorker] Path not found: {self.path} at {datetime.now()}\n")
                 self.signals.error.emit(f"Path not found: {self.path}")
                 return
                 
@@ -108,6 +124,8 @@ class ScannerWorker(QRunnable):
                 # Walk the directory
                 for root, dirs, filenames in os.walk(self.path):
                     if self.cancelled:
+                        with open('error.log', 'a', encoding='utf-8') as logf:
+                            logf.write(f"[ScannerWorker] Scan cancelled by user at {datetime.now()}\n")
                         self.signals.error.emit("Scan cancelled by user")
                         return
                         
@@ -127,6 +145,8 @@ class ScannerWorker(QRunnable):
                     # Process files
                     for filename in filenames:
                         if self.cancelled:
+                            with open('error.log', 'a', encoding='utf-8') as logf:
+                                logf.write(f"[ScannerWorker] Scan cancelled by user at {datetime.now()}\n")
                             self.signals.error.emit("Scan cancelled by user")
                             return
                             
@@ -206,6 +226,56 @@ class ScannerWorker(QRunnable):
         return False
 
 
+from PySide6.QtCore import QRunnable, QObject, Signal
+
+class DiskImageScanSignals(QObject):
+    started = Signal(str)
+    progress = Signal(int, int, str)  # files_found, total_files, current_path
+    finished = Signal(list)  # List of found disk image paths
+    error = Signal(str)
+
+class DiskImageScanWorker(QRunnable):
+    def __init__(self, directory, extensions=None):
+        super().__init__()
+        self.directory = directory
+        self.extensions = [ext.lower() for ext in (extensions or ['.cue', '.bin', '.iso', '.img', '.cdr', '.gdi', '.mdf', '.nrg'])]
+        self.signals = DiskImageScanSignals()
+        self.cancelled = False
+
+    def run(self):
+        try:
+            if not os.path.exists(self.directory):
+                self.signals.error.emit(f"Directory not found: {self.directory}")
+                return
+            self.signals.started.emit(f"Scanning {self.directory}")
+            disk_images = []
+            total_files = 0
+            for root, _, files in os.walk(self.directory):
+                total_files += len(files)
+            files_scanned = 0
+            for root, _, files in os.walk(self.directory):
+                for file in files:
+                    if self.cancelled:
+                        self.signals.error.emit("Scan cancelled by user")
+                        return
+                    file_path = os.path.join(root, file)
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in self.extensions:
+                        disk_images.append(file_path)
+                    files_scanned += 1
+                    if files_scanned % 20 == 0 or files_scanned == total_files:
+                        self.signals.progress.emit(len(disk_images), files_scanned, file_path)
+            self.signals.finished.emit(disk_images)
+        except Exception as e:
+            tb = traceback.format_exc()
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[DiskImageScanWorker] Error at {datetime.now()}\n")
+                logf.write(tb)
+            self.signals.error.emit(f"Error during disk image scan: {str(e)}\n{tb}")
+
+    def cancel(self):
+        self.cancelled = True
+
 class FileScanner:
     """Manager for file scanning operations.
     
@@ -216,6 +286,19 @@ class FileScanner:
     def __init__(self):
         """Initialize the FileScanner."""
         self.thread_pool = QThreadPool()
+
+    def find_disk_images_async(self, directory: str, extensions=None):
+        """
+        Asynchronously scan a directory for disk image files.
+        Args:
+            directory: Directory to scan
+            extensions: List of file extensions to include (default: common disk image types)
+        Returns:
+            DiskImageScanSignals object for connecting to started, progress, finished, and error signals.
+        """
+        worker = DiskImageScanWorker(directory, extensions)
+        self.thread_pool.start(worker)
+        return worker.signals
     
     def scan(self, 
              path: str, 
@@ -298,6 +381,28 @@ class FileScanner:
             return f"{size_bytes / (1024 * 1024):.2f} MB"
         else:
             return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+    
+    def find_disk_images(self, directory: str) -> List[str]:
+        """Find disk image files in a directory.
+        
+        Args:
+            directory: Directory to scan for disk images
+            
+        Returns:
+            List of paths to disk image files
+        """
+        disk_images = []
+        disk_image_extensions = ['.cue', '.bin', '.iso', '.img', '.cdr', '.gdi', '.mdf', '.nrg']
+        
+        # Walk through the directory and find disk images
+        for root, _, files in os.walk(directory):
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                if ext in disk_image_extensions:
+                    full_path = os.path.join(root, file)
+                    disk_images.append(full_path)
+        
+        return disk_images
     
     @staticmethod
     def get_media_type(file_path: str) -> str:

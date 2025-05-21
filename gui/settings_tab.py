@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 from modules.app_settings import AppSettings
 from modules.ui_functions import load_svg_icon
 from core.chdman import CHDManager
+# Persistent CHDMAN path helpers
+from modules.settings import save_chdman_path, load_chdman_path
 
 
 class SettingsTab(QWidget):
@@ -355,7 +357,7 @@ class SettingsTab(QWidget):
         self.limit_memory_check.toggled.connect(self.toggle_memory_limit)
     
     def load_settings(self):
-        """Load settings from AppSettings."""
+        """Load settings from AppSettings and persistent storage for CHDMAN path."""
         # General settings
         self.confirm_exit_check.setChecked(self.settings.get("general", "confirm_exit", True))
         self.remember_pos_check.setChecked(self.settings.get("general", "remember_position", True))
@@ -364,7 +366,7 @@ class SettingsTab(QWidget):
         # File handling
         self.input_dir_edit.setText(self.settings.get("files", "default_input_dir", ""))
         self.output_dir_edit.setText(self.settings.get("files", "default_output_dir", ""))
-        self.file_filters_edit.setText(self.settings.get("files", "default_filters", "*.iso;*.bin;*.img;*.cue"))
+        self.file_filters_edit.setText(self.settings.get("files", "default_filters", "*.iso;*.bin;*.img;*.cue;*.zip;*.7z;*.rar"))
         
         # Logging
         self.enable_logging_check.setChecked(self.settings.get("logging", "enabled", True))
@@ -372,7 +374,11 @@ class SettingsTab(QWidget):
         self.log_file_edit.setText(self.settings.get("logging", "file", "retroclamp.log"))
         
         # CHDMAN
-        self.chdman_path_edit.setText(self.settings.get("chdman", "path", ""))
+        chdman_path = self.settings.get("chdman", "path", "")
+        if not chdman_path:
+            # Try to load from persistent storage if not set
+            chdman_path = load_chdman_path()
+        self.chdman_path_edit.setText(chdman_path)
         self.compression_level_combo.setCurrentText(self.settings.get("chdman", "compression_level", "Normal"))
         self.hunk_size_combo.setCurrentText(self.settings.get("chdman", "hunk_size", "16 KB"))
         self.verify_check.setChecked(self.settings.get("chdman", "verify", True))
@@ -444,6 +450,7 @@ class SettingsTab(QWidget):
         
         if path:
             self.chdman_path_edit.setText(path)
+            save_chdman_path(path)  # Persist immediately
             self.update_chdman_version()
     
     @Slot()
@@ -454,6 +461,7 @@ class SettingsTab(QWidget):
         
         if chdman_path and os.path.exists(chdman_path):
             self.chdman_path_edit.setText(chdman_path)
+            save_chdman_path(chdman_path)  # Persist immediately
             self.update_chdman_version()
             
             QMessageBox.information(
@@ -542,7 +550,7 @@ class SettingsTab(QWidget):
     
     @Slot()
     def save_settings(self):
-        """Save settings to AppSettings."""
+        """Save settings to AppSettings and persist CHDMAN path."""
         # General settings
         self.settings.set("general", "confirm_exit", self.confirm_exit_check.isChecked())
         self.settings.set("general", "remember_position", self.remember_pos_check.isChecked())
@@ -559,7 +567,9 @@ class SettingsTab(QWidget):
         self.settings.set("logging", "file", self.log_file_edit.text())
         
         # CHDMAN
-        self.settings.set("chdman", "path", self.chdman_path_edit.text())
+        chdman_path = self.chdman_path_edit.text()
+        self.settings.set("chdman", "path", chdman_path)
+        save_chdman_path(chdman_path)  # Persist on save
         self.settings.set("chdman", "compression_level", self.compression_level_combo.currentText())
         self.settings.set("chdman", "hunk_size", self.hunk_size_combo.currentText())
         self.settings.set("chdman", "verify", self.verify_check.isChecked())

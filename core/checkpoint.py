@@ -11,6 +11,7 @@ import uuid
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
+import traceback
 
 from PySide6.QtCore import QObject, Signal
 
@@ -103,6 +104,13 @@ class CheckpointManager:
         self.current_checkpoint: Optional[Checkpoint] = None
     
     def create_checkpoint(self, name: str, items: List[BatchItem]) -> Checkpoint:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] Creating checkpoint at: {datetime.now()}\n")
+                logf.write(f"  Name: {name}\n  Items count: {len(items)}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log create_checkpoint: {logex}")
         """Create a new checkpoint.
         
         Args:
@@ -132,6 +140,13 @@ class CheckpointManager:
         return checkpoint
     
     def save_checkpoint(self) -> bool:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] Saving checkpoint at: {datetime.now()}\n")
+                logf.write(f"  Current checkpoint: {self.current_checkpoint.id if self.current_checkpoint else None}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log save_checkpoint: {logex}")
         """Save the current checkpoint.
         
         Returns:
@@ -148,6 +163,13 @@ class CheckpointManager:
         return True
     
     def load_checkpoint(self, checkpoint_id: str) -> Optional[Checkpoint]:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] Loading checkpoint at: {datetime.now()}\n")
+                logf.write(f"  Checkpoint ID: {checkpoint_id}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log load_checkpoint: {logex}")
         """Load a checkpoint by ID.
         
         Args:
@@ -190,40 +212,59 @@ class CheckpointManager:
             return checkpoint
             
         except Exception as e:
-            self.signals.error.emit(f"Error loading checkpoint: {str(e)}")
+            tb = traceback.format_exc()
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] Error loading checkpoint at {datetime.now()}\n")
+                logf.write(tb)
+            self.signals.error.emit(f"Error loading checkpoint: {str(e)}\n{tb}")
             return None
     
     def update_item(self, item_id: str, **updates) -> bool:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] Updating item at: {datetime.now()}\n")
+                logf.write(f"  Item ID: {item_id}\n  Updates: {updates}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log update_item: {logex}")
         """Update a batch item in the current checkpoint.
         
         Args:
             item_id: ID of the item to update
             **updates: Attributes to update
-            
+        
         Returns:
             True if successful, False otherwise
         """
         if not self.current_checkpoint:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] No current checkpoint to update at {datetime.now()}\n")
             self.signals.error.emit("No current checkpoint")
             return False
-        
-        # Find the item by ID
-        for item in self.current_checkpoint.items:
-            if item.id == item_id:
-                # Update the item attributes
-                for key, value in updates.items():
-                    if hasattr(item, key):
-                        setattr(item, key, value)
-                
-                # Update checkpoint stats
-                self._update_checkpoint_stats()
-                
-                # Save the updated checkpoint
-                self.save_checkpoint()
-                return True
-        
-        self.signals.error.emit(f"Item not found: {item_id}")
-        return False
+        try:
+            # Find the item by ID
+            for item in self.current_checkpoint.items:
+                if item.id == item_id:
+                    # Update the item attributes
+                    for key, value in updates.items():
+                        if hasattr(item, key):
+                            setattr(item, key, value)
+                    # Update checkpoint stats
+                    self._update_checkpoint_stats()
+                    # Save the updated checkpoint
+                    self.save_checkpoint()
+                    return True
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] Item not found: {item_id} at {datetime.now()}\n")
+            self.signals.error.emit(f"Item not found: {item_id}")
+            return False
+        except Exception as e:
+            tb = traceback.format_exc()
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] Error updating item at {datetime.now()}\n")
+                logf.write(tb)
+            self.signals.error.emit(f"Error updating item: {str(e)}\n{tb}")
+            return False
     
     def get_next_pending_item(self) -> Optional[BatchItem]:
         """Get the next pending item from the current checkpoint.
@@ -257,39 +298,51 @@ class CheckpointManager:
             List of checkpoint metadata (id, name, created_at, updated_at, progress)
         """
         checkpoints = []
-        
-        for filename in os.listdir(self.checkpoint_dir):
-            if filename.endswith(".json"):
-                try:
-                    checkpoint_path = os.path.join(self.checkpoint_dir, filename)
-                    with open(checkpoint_path, 'r') as f:
-                        data = json.load(f)
-                        
-                    # Calculate progress
-                    total = data.get("total_count", 0)
-                    completed = data.get("completed_count", 0)
-                    progress = (completed / total) * 100 if total > 0 else 0
-                    
-                    checkpoints.append({
-                        "id": data.get("id"),
-                        "name": data.get("name"),
-                        "created_at": data.get("created_at"),
-                        "updated_at": data.get("updated_at"),
-                        "progress": progress,
-                        "total_count": total,
-                        "completed_count": completed,
-                        "failed_count": data.get("failed_count", 0)
-                    })
-                except Exception:
-                    # Skip invalid checkpoint files
-                    pass
-        
-        # Sort by updated_at (newest first)
-        checkpoints.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
-        
-        return checkpoints
+        try:
+            for filename in os.listdir(self.checkpoint_dir):
+                if filename.endswith(".json"):
+                    try:
+                        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+                        with open(checkpoint_path, 'r') as f:
+                            data = json.load(f)
+                        # Calculate progress
+                        total = data.get("total_count", 0)
+                        completed = data.get("completed_count", 0)
+                        progress = (completed / total) * 100 if total > 0 else 0
+                        checkpoints.append({
+                            "id": data.get("id"),
+                            "name": data.get("name"),
+                            "created_at": data.get("created_at"),
+                            "updated_at": data.get("updated_at"),
+                            "progress": progress,
+                            "total_count": total,
+                            "completed_count": completed,
+                            "failed_count": data.get("failed_count", 0)
+                        })
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        with open('error.log', 'a', encoding='utf-8') as logf:
+                            logf.write(f"[CheckpointManager] Error reading checkpoint file {filename} at {datetime.now()}\n")
+                            logf.write(tb)
+                        continue
+            # Sort by updated_at (newest first)
+            checkpoints.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
+            return checkpoints
+        except Exception as e:
+            tb = traceback.format_exc()
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] Error listing checkpoints at {datetime.now()}\n")
+                logf.write(tb)
+            return []
     
     def delete_checkpoint(self, checkpoint_id: str) -> bool:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] Deleting checkpoint at: {datetime.now()}\n")
+                logf.write(f"  Checkpoint ID: {checkpoint_id}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log delete_checkpoint: {logex}")
         """Delete a checkpoint.
         
         Args:
@@ -298,13 +351,13 @@ class CheckpointManager:
         Returns:
             True if successful, False otherwise
         """
-        checkpoint_path = os.path.join(self.checkpoint_dir, f"{checkpoint_id}.json")
-        
-        if not os.path.exists(checkpoint_path):
-            self.signals.error.emit(f"Checkpoint not found: {checkpoint_id}")
-            return False
-        
         try:
+            checkpoint_path = os.path.join(self.checkpoint_dir, f"{checkpoint_id}.json")
+            
+            if not os.path.exists(checkpoint_path):
+                self.signals.error.emit(f"Checkpoint not found: {checkpoint_id}")
+                return False
+            
             os.remove(checkpoint_path)
             
             # If this was the current checkpoint, clear it
@@ -313,16 +366,28 @@ class CheckpointManager:
                 
             return True
         except Exception as e:
-            self.signals.error.emit(f"Error deleting checkpoint: {str(e)}")
+            tb = traceback.format_exc()
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"[CheckpointManager] Error deleting checkpoint at {datetime.now()}\n")
+                logf.write(tb)
+            self.signals.error.emit(f"Error deleting checkpoint: {str(e)}\n{tb}")
             return False
     
-    def _save_checkpoint(self, checkpoint: Checkpoint) -> None:
+    def _save_checkpoint(self, checkpoint: Checkpoint) -> bool:
+        # Log operation start
+        try:
+            with open('error.log', 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[CheckpointManager] _save_checkpoint at: {datetime.now()}\n")
+                logf.write(f"  Checkpoint ID: {checkpoint.id}\n")
+        except Exception as logex:
+            print(f"[CheckpointManager] Failed to log _save_checkpoint: {logex}")
         """Save a checkpoint to disk.
         
         Args:
             checkpoint: Checkpoint to save
         """
-        checkpoint_path = os.path.join(self.checkpoint_dir, f"{checkpoint.id}.json")
+        try:
+            checkpoint_path = os.path.join(self.checkpoint_dir, f"{checkpoint.id}.json")
         
         # Convert to dict for JSON serialization
         data = asdict(checkpoint)
