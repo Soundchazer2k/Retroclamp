@@ -120,14 +120,14 @@ class ArchiveWorker(QRunnable):
             if disk_images:
                 print(f"[ArchiveWorker] Skipping extraction: files already present in {self.output_path}.")
                 self.signals.progress.emit(100, "Extraction skipped: files already present.")
-                print(f"[ArchiveWorker] Emitting finished signal for already extracted files.")
+                print("[ArchiveWorker] Emitting finished signal for already extracted files.")
                 self.signals.finished.emit(True, "Files already extracted.", self.output_path)
                 return
             else:
                 print(f"[ArchiveWorker] Extraction skipped: No disk images found in existing folder {self.output_path}.")
                 with open('error.log', 'a', encoding='utf-8') as logf:
                     logf.write(f"[ArchiveWorker] Extraction skipped: No disk images found in existing folder {self.output_path} at {datetime.now()}\n")
-                print(f"[ArchiveWorker] Emitting error signal for no disk images found.")
+                print("[ArchiveWorker] Emitting error signal for no disk images found.")
                 self.signals.error.emit(f"Extraction skipped: No disk images found in existing folder {self.output_path}.")
                 return
 

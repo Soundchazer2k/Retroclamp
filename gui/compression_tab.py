@@ -21,10 +21,13 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QTableWidget,
     QMessageBox,
+
+
+    QGroupBox,
     QSizePolicy,
     QTextEdit,
-    QGroupBox,
     QFormLayout,
+
 )
 
 from PySide6.QtGui import QIcon
@@ -376,15 +379,10 @@ class CompressionTab(QWidget):
         self.log_message(f"[MARKER] files_table row count: {row_count}")
         if row_count == 0:
             print("[MARKER] WARNING: files_table is empty at start_compression!")
-            self.log_message(
-                "[MARKER] WARNING: files_table is empty at start_compression!"
-            )
+            self.log_message("[MARKER] WARNING: files_table is empty at start_compression!")
         import os
-        from PySide6.QtWidgets import QMessageBox, QInputDialog
-
-        # Deduplication: Track files queued for compression in this run
+        from PySide6.QtWidgets import QMessageBox
         self._queued_files = set()
-
         # When connecting worker signals, log each connection
         # Example (actual code may differ):
         # worker.signals.finished.connect(lambda *args: self.on_task_finished(*args))

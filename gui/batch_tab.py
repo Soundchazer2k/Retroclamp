@@ -11,9 +11,9 @@ allowing users to process multiple files at once.
 import logging
 import os
 import time
-import logging
 from datetime import datetime
 import traceback
+import tempfile
 
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QMutex, QWaitCondition
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 # Import core components
-from core.chdman import CHDManager, CHDMan, CHDTask, CHDTaskType
+from core.chdman import CHDMan, CHDTask, CHDTaskType
 from core.checkpoint_manager import CheckpointManager
 
 from core.archive import ArchiveManager
@@ -996,15 +996,7 @@ class BatchTab(QWidget):
 
     # Removed duplicate abort_processing method - keeping the more complete implementation below
             
-    def check_for_existing_checkpoints(self):
-        """Check for existing checkpoints and update UI accordingly."""
-        latest_checkpoint = self.checkpoint_manager.get_latest_checkpoint()
-        if latest_checkpoint:
-            self.resume_btn.setVisible(True)
-            self.update_checkpoint_preview(latest_checkpoint)
-        else:
-            self.resume_btn.setVisible(False)
-            self.checkpoint_info.setVisible(False)
+    # Removed duplicate definition of check_for_existing_checkpoints to resolve lint warning.
     
     def update_status_indicator(self, status=None):
         """Update the status indicator with the current state."""

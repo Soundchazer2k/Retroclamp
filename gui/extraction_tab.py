@@ -5,7 +5,6 @@ from CHD files using the CHDMAN utility.
 """
 
 import os
-import shutil
 import zipfile
 import py7zr
 
@@ -14,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QCheckBox, QGroupBox, QFormLayout,
-    QProgressBar, QSplitter, QPlainTextEdit, QApplication
+    QProgressBar, QSplitter, QPlainTextEdit
 )
 
 # Import local modules
