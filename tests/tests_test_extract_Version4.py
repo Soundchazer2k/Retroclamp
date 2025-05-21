@@ -1,7 +1,4 @@
-import os
-import tempfile
 import zipfile
-import pytest
 
 def create_test_zip_with_disk_images(tmp_path):
     zip_path = tmp_path / "test.zip"

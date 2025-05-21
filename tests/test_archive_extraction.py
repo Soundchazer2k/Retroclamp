@@ -1,6 +1,5 @@
 import zipfile
 import pytest
-from pathlib import Path
 
 @pytest.fixture
 def zip_with_files(tmp_path):

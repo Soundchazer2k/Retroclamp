@@ -7,8 +7,7 @@ and adds itself to the tools tab.
 
 import os
 import importlib
-import inspect
-from typing import Dict, Any, List, Callable, Optional
+from typing import Dict, List, Callable, Optional
 
 from PySide6.QtWidgets import QWidget
 

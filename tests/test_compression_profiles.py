@@ -10,7 +10,6 @@ This script tests the compression profiles implementation to ensure that:
 3. Media type detection works as expected
 """
 
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -18,7 +17,7 @@ from pathlib import Path
 # Add parent directory to path to import modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from core.compression_profiles import CompressionProfile, CompressionProfileManager
+from core.compression_profiles import CompressionProfileManager
 from core.chdman import CHDTask, CHDTaskType
 
 

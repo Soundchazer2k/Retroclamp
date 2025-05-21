@@ -6,7 +6,6 @@ This script parses a PRD markdown file and generates a tasks.json file for Taskm
 """
 
 import json
-import re
 from pathlib import Path
 from datetime import datetime
 
@@ -23,7 +22,7 @@ def parse_prd(prd_path: str, output_dir: str = "tasks") -> None:
     
     # Read the PRD file
     with open(prd_path, 'r', encoding='utf-8') as f:
-        prd_content = f.read()
+        pass
     
     # Parse the PRD to extract tasks
     tasks = []

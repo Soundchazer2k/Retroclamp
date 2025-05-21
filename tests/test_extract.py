@@ -1,5 +1,4 @@
 import zipfile
-import pytest
 
 def test_extract_bin_file(tmp_path):
     zf_path = tmp_path / "test.zip"
