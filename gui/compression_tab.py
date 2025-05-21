@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from PySide6.QtGui import QIcon
-from core.chdman import CHDTask, CHDTaskType
+from core.chdman import CHDTask, CHDTaskType, CHDCompressionType
 from core.archive import ArchiveManager
 from core.file_scanner import FileScanner
 
@@ -43,16 +43,21 @@ COMPRESSION_PROFILES = {
     "CD - Default": {
         "algorithms": "cdlz,cdzl,cdfl",
         "hunk_size": 19584,
-    },  # 8 * 2448 (CD sector size)
-    "CD - Fast": {"algorithms": "cdlz", "hunk_size": 19584},
-    "DVD - Default": {"algorithms": "zlib,huff", "hunk_size": 2048},  # DVD sector size
-    "DVD - Best": {"algorithms": "lzma", "hunk_size": 2048},
+        "enum": CHDCompressionType.ZLIB_HUFF,
+    },
+    "CD - Fast": {"algorithms": "cdlz", "hunk_size": 19584, "enum": CHDCompressionType.ZLIB},
+    "DVD - Default": {"algorithms": "zlib,huff", "hunk_size": 2048, "enum": CHDCompressionType.ZLIB_HUFF},
+    "DVD - Best": {"algorithms": "lzma", "hunk_size": 2048, "enum": CHDCompressionType.LZMA},
     "Hard Disk - Default": {
         "algorithms": "zlib,huff",
         "hunk_size": 4096,
-    },  # Standard block size
-    "Hard Disk - Best": {"algorithms": "lzma", "hunk_size": 4096},
+        "enum": CHDCompressionType.ZLIB_HUFF,
+    },
+    "Hard Disk - Best": {"algorithms": "lzma", "hunk_size": 4096, "enum": CHDCompressionType.LZMA},
 }
+
+# Map profile names to CHDCompressionType
+PROFILE_TO_COMPRESSION_TYPE = {k: v["enum"] for k, v in COMPRESSION_PROFILES.items()}
 
 
 class CompressionTab(QWidget):
@@ -585,6 +590,7 @@ class CompressionTab(QWidget):
                     hunk_size=self.get_hunk_size(media_type),
                     force=force_overwrite,
                     media_type=media_type,
+                    compression=self.get_compression_type(),
                     user_data={"row": row, "original_input": file_path},
                 )
                 self.chd_manager.add_task(task)
@@ -670,6 +676,7 @@ class CompressionTab(QWidget):
                     hunk_size=self.get_hunk_size(self.detect_media_type(input_path)),
                     force=self.overwrite_check.isChecked(),
                     media_type=self.detect_media_type(input_path),
+                    compression=self.get_compression_type(),
                     user_data={"row": initial_ui_row, "original_input": input_path},
                 )
                 self.chd_manager.add_task(task)
@@ -969,6 +976,7 @@ class CompressionTab(QWidget):
                                         hunk_size=self.get_hunk_size(media_type),
                                         force=self.overwrite_check.isChecked(),
                                         media_type=media_type,
+                                        compression=self.get_compression_type(),
                                         user_data={"row": row, "original_input": img},
                                     )
                                     self.chd_manager.add_task(task)
@@ -1068,6 +1076,10 @@ class CompressionTab(QWidget):
                                         output_file=output_path_chd,
                                         algorithms=compression_algos,
                                         hunk_size=self.get_hunk_size(media_type),
+                                        force=self.overwrite_check.isChecked(),
+                                        media_type=media_type,
+                                        compression=self.get_compression_type(),
+                                        user_data={"row": row, "original_input": img},
                                     )
                                     self.chd_manager.add_task(task)
                                 self.log_message(
@@ -1111,6 +1123,10 @@ class CompressionTab(QWidget):
                                         output_file=output_path_chd,
                                         algorithms=compression_algos,
                                         hunk_size=self.get_hunk_size(media_type),
+                                        force=self.overwrite_check.isChecked(),
+                                        media_type=media_type,
+                                        compression=self.get_compression_type(),
+                                        user_data={"row": row, "original_input": img},
                                     )
                                     self.chd_manager.add_task(task)
                                 self.log_message(
@@ -1444,17 +1460,14 @@ class CompressionTab(QWidget):
         return pruned
 
     def get_compression_options(self):
-        """Get compression options from UI."""
-        profile_name = self.profile_combo.currentText()
-        if profile_name in COMPRESSION_PROFILES:
-            return COMPRESSION_PROFILES[profile_name]["algorithms"]
-        media_type = self.media_type_combo.currentText()
-        if media_type == "CD":
-            return "cdlz,cdzl,cdfl"
-        elif media_type == "DVD":
-            return "zlib,huff"
-        else:
-            return "zlib,huff"
+        """Get the selected compression algorithms string from the profile combo."""
+        profile = self.profile_combo.currentText()
+        return COMPRESSION_PROFILES[profile]["algorithms"]
+
+    def get_compression_type(self):
+        """Get the CHDCompressionType for the selected profile."""
+        profile = self.profile_combo.currentText()
+        return PROFILE_TO_COMPRESSION_TYPE.get(profile, CHDCompressionType.ZLIB)
 
     def get_hunk_size(self, media_type):
         """Get appropriate hunk size for media type."""

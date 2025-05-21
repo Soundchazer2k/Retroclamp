@@ -14,11 +14,17 @@ from enum import Enum, auto
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
-# Import persistent settings for CHDMAN path
 from modules.settings import load_chdman_path
-
 from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool, QMutex, QMutexLocker
 
+class CHDCompressionType(Enum):
+    """Available compression types for CHD files."""
+    ZLIB = "zlib"
+    ZLIB_HUFF = "zlib_huff"
+    LZMA = "lzma"
+    SDX = "sdx"
+    AUTO = "auto"
+    # Add more as needed
 
 class CHDManError(Exception):
     """Base exception for CHDMAN operations."""

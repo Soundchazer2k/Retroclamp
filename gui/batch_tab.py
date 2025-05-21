@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 # Import core components
-from core.chdman import CHDMan, CHDTask, CHDTaskType
+from core.chdman import CHDMan, CHDTask, CHDTaskType, CHDCompressionType
 from core.checkpoint_manager import CheckpointManager
 
 from core.archive import ArchiveManager
@@ -57,7 +57,7 @@ class BatchWorker(QThread):
     file_completed = Signal(str, str)  # file_path, status_message
     
     def __init__(self, file_path: str, output_dir: str, operation: str, 
-                 compression: str = 'zlib', verify: bool = False, parent=None):
+                 compression: CHDCompressionType = CHDCompressionType.ZLIB, verify: bool = False, parent=None):
         """Initialize the BatchWorker.
         
         Args:
@@ -72,7 +72,7 @@ class BatchWorker(QThread):
         self.file_path = file_path
         self.output_dir = output_dir
         self.operation = operation.lower()
-        self.compression = compression
+        self.compression = compression.value if isinstance(compression, CHDCompressionType) else compression
         self.verify = verify
         self._is_running = True
         self._is_paused = False
