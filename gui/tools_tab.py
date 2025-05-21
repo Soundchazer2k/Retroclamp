@@ -1,12 +1,11 @@
-print("RUNNING tools_tab.py FROM:", __file__)
-import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget
 )
-from PySide6.QtCore import Qt
 
 from tools.scummvm_generator import ScummVMGenerator
 from gui.m3u_tab import M3UTab
+
+print("RUNNING tools_tab.py FROM:", __file__)
 
 class ToolsTab(QWidget):
     def __init__(self, parent=None):

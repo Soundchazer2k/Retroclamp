@@ -7,6 +7,8 @@ from CHD files using the CHDMAN utility.
 import os
 import zipfile
 import py7zr
+import shutil
+from PySide6.QtWidgets import QApplication
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (

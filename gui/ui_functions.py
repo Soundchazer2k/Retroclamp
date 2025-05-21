@@ -4,14 +4,13 @@ This module provides common UI-related functions used across the application,
 such as icon loading, theming, and other UI utilities.
 """
 
-import os
 from pathlib import Path
 from typing import Optional, Union
 
-from PySide6.QtGui import QIcon, QPixmap, QColor
+from PySide6.QtGui import QIcon, QColor, QPixmap, QPainter
 from PySide6.QtWidgets import QApplication
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice
+from PySide6.QtCore import Qt
 
 def get_icon(icon_name: str, color: Optional[Union[str, QColor]] = None, size: int = 24) -> QIcon:
     """Load an icon with optional color and size.

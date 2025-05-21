@@ -215,7 +215,6 @@ class BatchProcessor(QObject):
     def load_state(self, file_path: str) -> bool:
         """Load the batch state from a file."""
         import os
-        import json
         import logging
         logger = logging.getLogger(__name__)
         if not file_path or not isinstance(file_path, str) or not os.path.exists(file_path):
@@ -959,7 +958,6 @@ class BatchProcessor(QObject):
                 Returns:
                     bool: True if write was successful, False otherwise
         """
-        import json
         import os
         import hashlib
         import logging

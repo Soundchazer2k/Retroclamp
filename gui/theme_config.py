@@ -4,7 +4,7 @@ This module provides theme configuration and styling for the application UI.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 @dataclass
 class ThemeConfig:

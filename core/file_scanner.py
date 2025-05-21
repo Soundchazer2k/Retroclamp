@@ -226,7 +226,6 @@ class ScannerWorker(QRunnable):
         return False
 
 
-from PySide6.QtCore import QRunnable, QObject, Signal
 
 class DiskImageScanSignals(QObject):
     started = Signal(str)

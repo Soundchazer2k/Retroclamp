@@ -6,13 +6,11 @@ for compressed game files.
 
 import os
 import re
-from typing import Dict, Any, List, Optional
 
-from PySide6.QtCore import Qt, Signal, Slot, QSize
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QComboBox, QFileDialog, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QCheckBox, QGroupBox, QFormLayout
+    QLineEdit, QComboBox, QFileDialog, QMessageBox, QCheckBox, QGroupBox, QFormLayout
 )
 
 from modules.ui_functions import load_svg_icon

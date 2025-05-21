@@ -5,8 +5,7 @@ conversion, contrast calculation, and accessibility validation.
 """
 
 import re
-import math
-from typing import Tuple, Dict, Any, List, Optional
+from typing import Tuple, Dict, Any, List
 
 from PySide6.QtGui import QColor
 

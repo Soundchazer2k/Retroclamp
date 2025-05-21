@@ -4,15 +4,13 @@ This module provides the UI and functionality for customizing the application th
 """
 
 import os
-import json
-from typing import Dict, Any, List, Optional
 
 from PySide6.QtCore import Qt, Signal, Slot, QSize
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QComboBox, QFileDialog, QColorDialog, QMessageBox,
-    QGroupBox, QFormLayout, QScrollArea, QFrame, QSizePolicy
+    QComboBox, QFileDialog, QColorDialog, QMessageBox,
+    QGroupBox, QFormLayout, QScrollArea, QFrame
 )
 
 # Import local modules

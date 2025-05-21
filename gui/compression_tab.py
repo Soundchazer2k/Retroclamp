@@ -451,12 +451,12 @@ class CompressionTab(QWidget):
                     file_item = self.files_table.item(row, 0)
                     status_item = self.files_table.item(row, 1)
                     fi_str = (
-                        f"None"
+                        "None"
                         if file_item is None
                         else f"<{type(file_item).__name__} {repr(file_item)} >"
                     )
                     si_str = (
-                        f"None"
+                        "None"
                         if status_item is None
                         else f"<{type(status_item).__name__} {repr(status_item)} >"
                     )

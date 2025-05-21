@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog, QTableWidget, QTableWidgetItem, QTextEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog, QTableWidget
 )
-from PySide6.QtCore import Qt
 
 class M3UTab(QWidget):
     """M3U Playlist Tool for managing multi-disc games."""
@@ -51,6 +50,7 @@ class M3UTab(QWidget):
         layout.addLayout(batch_layout)
 
         # Status/log output
+        from PySide6.QtWidgets import QTextEdit
         self.log_panel = QTextEdit()
         self.log_panel.setReadOnly(True)
         layout.addWidget(self.log_panel)

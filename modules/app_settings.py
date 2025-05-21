@@ -4,9 +4,8 @@ This module provides functionality for managing application settings and prefere
 including loading, saving, and accessing settings values.
 """
 
-import os
 import json
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional
 
 from PySide6.QtCore import QObject, Signal, QSettings
 

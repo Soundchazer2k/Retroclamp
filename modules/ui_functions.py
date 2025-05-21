@@ -7,8 +7,8 @@ dynamic icon loading, theme application, and widget manipulation.
 import os
 from typing import Optional, Dict, Any, List, Tuple
 
-from PySide6.QtCore import Qt, QSize, QPoint, QRect
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush, QPainterPath, QPalette
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette
 from PySide6.QtWidgets import QWidget, QMainWindow, QPushButton, QGraphicsDropShadowEffect
 from PySide6.QtSvg import QSvgRenderer
 

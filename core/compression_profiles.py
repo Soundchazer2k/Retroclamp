@@ -7,7 +7,7 @@ CD, DVD, and hard disk images, as well as specific gaming consoles.
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 
 @dataclass

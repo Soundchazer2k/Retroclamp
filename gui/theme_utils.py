@@ -4,11 +4,11 @@ This module provides utility functions for working with themes and colors
 in the application UI.
 """
 
-from typing import Optional, Union, Dict, Any
-from PySide6.QtGui import QColor, QPalette, QIcon, QPixmap
+from typing import Optional, Union
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtCore import Qt
 
-from .theme_config import ThemeConfig, DARK_THEME, LIGHT_THEME
+from .theme_config import ThemeConfig, DARK_THEME
 
 def get_theme_color(color_name: str, theme: Optional[ThemeConfig] = None) -> str:
     """Get a color from the current theme.
@@ -75,83 +75,73 @@ def apply_stylesheet(widget, theme: ThemeConfig):
         theme: The theme to use for styling
     """
     # Get contrast colors for text
-    text_color = theme.text_color
     disabled_text_color = theme.disabled_color
     highlight_text_color = get_contrasting_text_color(theme.primary_color)
     
     stylesheet = f"""
     QWidget {{
-        background-color: {background};
-        color: {text};
+        background-color: {theme.background_color};
+        color: {theme.text_color};
         font-family: Arial, sans-serif;
         font-size: 12px;
     }}
     
     QPushButton {{
-        background-color: {primary};
-        color: {highlight_text};
-        border: 1px solid {primary_dark};
+        background-color: {theme.primary_color};
+        color: {highlight_text_color};
+        border: 1px solid {theme.secondary_color};
         border-radius: 4px;
         padding: 5px 10px;
         min-width: 80px;
     }}
     
     QPushButton:hover {{
-        background-color: {primary_dark};
+        background-color: {theme.secondary_color};
     }}
     
     QPushButton:disabled {{
-        background-color: {disabled};
-        color: {disabled_text};
-        border-color: {disabled};
+        background-color: {theme.disabled_color};
+        color: {disabled_text_color};
+        border-color: {theme.disabled_color};
     }}
     
     QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QDateTimeEdit, QTimeEdit {{
-        background-color: {highlight};
-        color: {text};
-        border: 1px solid {disabled};
+        background-color: {theme.highlight_color};
+        color: {theme.text_color};
+        border: 1px solid {theme.disabled_color};
         border-radius: 3px;
         padding: 3px 5px;
     }}
     
     QLabel {{
-        color: {text};
+        color: {theme.text_color};
     }}
     
     QProgressBar {{
-        border: 1px solid {disabled};
+        border: 1px solid {theme.disabled_color};
         border-radius: 3px;
         text-align: center;
     }}
     
     QProgressBar::chunk {{
-        background-color: {primary};
+        background-color: {theme.primary_color};
         width: 10px;
     }}
     
     QTabBar::tab {{
-        background: {highlight};
-        color: {text};
-        border: 1px solid {disabled};
+        background: {theme.highlight_color};
+        color: {theme.text_color};
+        border: 1px solid {theme.disabled_color};
         border-bottom: none;
         padding: 5px 10px;
         margin-right: 2px;
     }}
     
     QTabBar::tab:selected, QTabBar::tab:hover {{
-        background: {primary};
-        color: {highlight_text};
+        background: {theme.primary_color};
+        color: {highlight_text_color};
     }}
-    """.format(
-        background=theme.background_color,
-        primary=theme.primary_color,
-        primary_dark=theme.secondary_color,
-        text=theme.text_color,
-        highlight=theme.highlight_color,
-        disabled=theme.disabled_color,
-        disabled_text=disabled_text_color,
-        highlight_text=highlight_text_color
-    )
+    """
     
     widget.setStyleSheet(stylesheet)
 

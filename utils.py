@@ -4,16 +4,15 @@ This module provides common utility functions used throughout the application.
 """
 
 import os
-import sys
 import logging
-from typing import Any, Optional, Callable, TypeVar, Type, Tuple
-from pathlib import Path
+from typing import Optional, TypeVar, Tuple
 
 from PySide6.QtWidgets import (
-    QMessageBox, QApplication, QFileDialog, QInputDialog, QWidget
+    QMessageBox, QFileDialog, QInputDialog, QWidget
 )
-from PySide6.QtCore import Qt, QSize, QByteArray, QBuffer, QIODevice, QMimeData, QUrl
-from PySide6.QtGui import QPixmap, QIcon, QColor, QPainter, QImage
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice
+from PySide6.QtGui import QPixmap, QIcon, QColor, QPainter
+from PySide6.QtSvg import QSvgRenderer
 
 # Type variable for generic type hinting
 T = TypeVar('T')

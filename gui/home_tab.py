@@ -3,7 +3,7 @@
 This module provides the UI for the home screen of the application.
 """
 
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QSize
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QSize
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,

@@ -5,16 +5,15 @@ a modern, user-friendly interface for compressing, decompressing, and managing
 disk images using the CHDMAN utility.
 """
 
-import json
-import logging
 import os
 import sys
+import traceback
 from PySide6.QtCore import Qt, QSize, QPoint, QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QIcon, QFont
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QFrame, QVBoxLayout, QHBoxLayout,
     QPushButton, QStackedWidget, QWidget, QSpacerItem,
-    QSizePolicy, QMessageBox, QTabWidget, QLabel, QComboBox, QLineEdit, QFileDialog, QProgressBar
+    QSizePolicy, QMessageBox, QTabWidget
 )
 
 # Set environment variables for high DPI scaling
@@ -778,7 +777,6 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-import traceback
 
 def log_uncaught_exception(exc_type, exc_value, exc_traceback):
     # Log to error.log
@@ -799,7 +797,6 @@ def log_uncaught_exception(exc_type, exc_value, exc_traceback):
     except Exception:
         pass
 
-import sys
 sys.excepthook = log_uncaught_exception
 
 def main():

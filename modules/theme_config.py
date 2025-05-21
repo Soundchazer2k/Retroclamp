@@ -90,19 +90,13 @@ class ThemeConfig:
         secondary_bg = colors.get("secondaryBackground", "#44475a")
         foreground = colors.get("foreground", "#f8f8f2")
         secondary_fg = colors.get("secondaryForeground", "#6272a4")
-        error = colors.get("error", "#ff5555")
-        warning = colors.get("warning", "#ffb86c")
-        info = colors.get("info", "#8be9fd")
-        success = colors.get("success", "#50fa7b")
         border = colors.get("border", "#44475a")
-        shadow = colors.get("shadow", "rgba(0, 0, 0, 0.4)")
         
         # Extract font values
         fonts = config.get("fonts", {})
         font_family = fonts.get("family", "Segoe UI")
         font_size = fonts.get("size", 10)
         title_size = fonts.get("titleSize", 12)
-        header_size = fonts.get("headerSize", 14)
         
         # Extract border values
         borders = config.get("borders", {})
@@ -113,11 +107,8 @@ class ThemeConfig:
         spacing = config.get("spacing", {})
         spacing_small = spacing.get("small", 4)
         spacing_medium = spacing.get("medium", 8)
-        spacing_large = spacing.get("large", 16)
         
         # Extract animation values
-        animation = config.get("animation", {})
-        animation_duration = animation.get("duration", 300)
         
         # Generate the QSS stylesheet
         qss = f"""

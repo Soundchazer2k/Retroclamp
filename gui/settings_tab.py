@@ -4,14 +4,12 @@ This module provides the UI and functionality for configuring application settin
 """
 
 import os
-import sys
-from typing import Dict, Any, List, Optional
 
-from PySide6.QtCore import Qt, Signal, Slot, QSize
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QFileDialog, QMessageBox, QCheckBox,
-    QGroupBox, QFormLayout, QSpinBox, QTabWidget, QScrollArea, QFrame
+    QGroupBox, QFormLayout, QSpinBox, QTabWidget
 )
 
 # Import local modules
