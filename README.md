@@ -1,5 +1,8 @@
 # RetroClamp
 
+![Build Status](https://github.com/Soundchazer2k/Retroclamp/actions/workflows/python-app.yml/badge.svg)
+![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)
+
 A modern GUI for CHDMAN operations, allowing you to compress, decompress, and manage disk images with ease.
 
 ## Current Status
