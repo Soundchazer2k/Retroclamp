@@ -8,7 +8,6 @@ operations on CHD files with proper progress reporting and error handling.
 import os
 import re
 import subprocess
-from datetime import datetime
 import time
 from enum import Enum, auto
 from typing import Dict, Optional, Any, List 
@@ -843,4 +842,3 @@ def get_chd_manager():
                 _chd_manager_singleton = CHDManager(executable_path=chdman_path)
     return _chd_manager_singleton
 
-[end of core/chdman.py]
