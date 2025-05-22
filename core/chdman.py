@@ -11,102 +11,78 @@ import subprocess
 from datetime import datetime
 import time
 from enum import Enum, auto
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List 
 from dataclasses import dataclass
+import logging
+import shutil 
+import queue 
+import threading # Ensure threading is imported for locks
 
 from modules.settings import load_chdman_path
 from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool, QMutex, QMutexLocker
 
 class CHDCompressionType(Enum):
     """Available compression types for CHD files."""
-    ZLIB = "zlib"
-    ZLIB_HUFF = "zlib_huff"
-    LZMA = "lzma"
-    SDX = "sdx"
-    AUTO = "auto"
-    # Add more as needed
+    ZLIB = 'zlib'
+    ZLIB_HUFF = 'zlib_huff'
+    LZMA = 'lzma'
+    SDX = 'sdx'
+    AUTO = 'auto'
 
 class CHDManError(Exception):
     """Base exception for CHDMAN operations."""
     pass
 
-
 class CHDManExecutableNotFoundError(CHDManError):
     """Raised when the CHDMAN executable cannot be found."""
     pass
 
-
 class CHDManCommandError(CHDManError):
-    """Raised when a CHDMAN command fails.
-    
-    Attributes:
-        command: The command that failed
-        returncode: The return code of the command
-        output: The output of the command
-    """
+    """Raised when a CHDMAN command fails."""
     def __init__(self, command: str, returncode: int, output: str):
         self.command = command
         self.returncode = returncode
         self.output = output
-        super().__init__(f"CHDMAN command '{command}' failed with return code {returncode}: {output}")
-
+        super().__init__(
+            f"CHDMAN command '{command}' failed with return code {returncode}: {output}"
+        )
 
 class CHDManInputFileError(CHDManError):
     """Raised when an input file is invalid or not found."""
     pass
 
-
 class CHDManOutputFileError(CHDManError):
     """Raised when an output file cannot be created or written to."""
     pass
 
-
-
 @dataclass
 class CHDManCommand:
-    """Represents a CHDMAN command with its parameters.
-    
-    Attributes:
-        name: Command name (e.g., 'createcd', 'info')
-        description: Human-readable description of the command
-        requires_input: Whether the command requires an input file
-        requires_output: Whether the command requires an output file
-        supports_compression: Whether the command supports compression options
-    """
+    """Represents a CHDMAN command with its parameters."""
     name: str
     description: str
     requires_input: bool
     requires_output: bool
     supports_compression: bool
 
-
 class CHDManSignals(QObject):
-    """Signals for CHDMan operations.
-    
-    Signals:
-        started: Emitted when the operation starts
-        progress: Emitted during operation with progress percentage and message
-        finished: Emitted when the operation completes successfully
-        error: Emitted when an error occurs
-        progress_updated: Emitted when progress is updated (progress, message, worker_id)
-        task_completed: Emitted when a task is completed (task_id, success, message)
-    """
-    started = Signal(str)  # Command description
-    progress = Signal(float, str)  # Progress percentage, message
-    finished = Signal(bool, str)  # Success status, message
-    error = Signal(str)  # Error message
-    progress_updated = Signal(float, str, str)  # Progress percentage, message, worker_id
-    task_completed = Signal(str, bool, str)  # task_id, success, message
-    error_occurred = Signal(str)  # Error message for compatibility with BatchProcessor
-
+    """Signals for CHDMan operations."""
+    started = Signal(str)
+    progress = Signal(float, str)
+    finished = Signal(bool, str)
+    error = Signal(str)
+    progress_updated = Signal(float, str, str)
+    task_completed = Signal(str, bool, str)
+    error_occurred = Signal(str)
 
 class CHDManWorker(QRunnable):
-    """Worker for running CHDMAN operations in a separate thread.
+    """Worker for running CHDMAN operations in a separate thread."""
     
-    This class handles the execution of CHDMAN commands asynchronously,
-    reporting progress and results through signals.
-    """
-    
+    VALID_COMPRESSION_ALGORITHMS = [
+        'none', 'zlib', 'zstd', 'lzma', 'huff', 'flac', 
+        'cdlz', 'cdzl', 'cdfl', 'avhu'
+    ]
+    COMPRESSION_CORRECTIONS = {'cdzlib': 'cdzl', 'cdflac': 'cdfl'}
+
     def __init__(self, 
                  executable_path: str,
                  command: str, 
@@ -118,19 +94,6 @@ class CHDManWorker(QRunnable):
                  verbose: bool = True,
                  worker_id: Optional[str] = None,
                  **kwargs):
-        """Initialize the CHDManWorker.
-        
-        Args:
-            executable_path: Path to the CHDMAN executable
-            command: CHDMAN command to execute (e.g., 'createcd', 'info')
-            input_file: Path to the input file
-            output_file: Path to the output file (if applicable)
-            compression: Compression algorithm(s) to use (if applicable)
-            hunk_size: Hunk size in bytes (if applicable)
-            force: Whether to force overwrite of output file
-            verbose: Whether to enable verbose output
-            **kwargs: Additional command-specific parameters
-        """
         super().__init__()
         self.executable_path = executable_path
         self.command = command
@@ -139,1566 +102,659 @@ class CHDManWorker(QRunnable):
         self.compression = compression
         self.hunk_size = hunk_size
         self.force = force
-        self.verbose = verbose
+        self.verbose = verbose 
         self.kwargs = kwargs
-        self.worker_id = worker_id or str(id(self))  # Use the object ID if no worker_id provided
+        self.worker_id = worker_id or str(id(self))
         
-        # Initialize signals
         self.signals = CHDManSignals()
-        self.process = None
+        self.process: Optional[subprocess.Popen] = None
         self.cancelled = False
+        self.logger = logging.getLogger(__name__ + '.CHDManWorker')
         
-        # Log the worker instantiation
-        try:
-            with open('error.log', 'a', encoding='utf-8') as logf:
-                logf.write(f"[CHDManWorker] __init__ with executable_path: {self.executable_path}, command: {self.command}\n")
-        except Exception:
-            pass
-        
-    @Slot()
-    def run(self):
-        if getattr(self, "_has_run", False):
-            return
-        self._has_run = True
-        """Execute the CHDMAN command.
-        
-        This method is called when the worker is started by the thread pool.
-        It builds the command, executes it, and monitors the progress.
-        """
-        try:
-            # Log before launching
-            try:
-                with open('error.log', 'a', encoding='utf-8') as logf:
-                    logf.write(f"[CHDManWorker.run] Launching: {self.executable_path} with command: {self.command}, input: {self.input_file}, output: {self.output_file}\n")
-            except Exception:
-                pass
-            
-            # Log all key paths and command info to error.log (for debugging)
-            with open('error.log', 'a', encoding='utf-8') as logf:
-                logf.write(f"\n[CHDManWorker] Starting run at: {datetime.now()}\n")
-                logf.write(f"  Executable: {self.executable_path}\n")
-                logf.write(f"  Command: {self.command}\n")
-                logf.write(f"  Input file: {self.input_file}\n")
-                logf.write(f"  Output file: {self.output_file}\n")
-                logf.write(f"  Compression: {self.compression}\n")
-                logf.write(f"  Hunk size: {self.hunk_size}\n")
-                logf.write(f"  Force: {self.force}\n")
-                logf.write(f"  Worker ID: {self.worker_id}\n")
-                logf.write(f"  KWArgs: {self.kwargs}\n")
-            print(f"[CHDManWorker] Launching: {self.executable_path} {self.command} -i {self.input_file} -o {self.output_file}")
+        self.logger.info(
+            f'__init__ for worker {self.worker_id}: command={self.command}, '
+            f'input={self.input_file}, output={self.output_file}'
+        )
 
-            # Check if executable exists using shutil.which
-            import shutil
-            if shutil.which(self.executable_path) is None:
-                raise CHDManExecutableNotFoundError(
-                    f"Cannot find '{self.executable_path}' in PATH."
+    @staticmethod
+    def _sanitize_compression_algorithms(compression_input: Optional[str]) -> Optional[str]:
+        """Validates and sanitizes compression algorithm string(s)."""
+        if not compression_input:
+            return None
+
+        processed_algorithms = []
+        static_logger = logging.getLogger(__name__ + '.CHDManWorker._sanitize_compression_algorithms')
+
+        for algo_name_iter in compression_input.split(','):
+            original_algo_name = algo_name_iter.strip()
+            algo_name = original_algo_name.lower()
+
+            if algo_name in CHDManWorker.COMPRESSION_CORRECTIONS:
+                corrected_name = CHDManWorker.COMPRESSION_CORRECTIONS[algo_name]
+                static_logger.warning(
+                    f"Correcting compression algorithm '{original_algo_name}' to '{corrected_name}'."
                 )
-                
-            # Check if input file exists
-            if not os.path.exists(self.input_file):
-                raise CHDManInputFileError(f"Input file not found: {self.input_file}")
-                
-            # Check if output directory exists for commands that require output
-            if self.output_file:
-                # Check if output file exists and try to delete it first (even with force flag)
-                if os.path.exists(self.output_file):
-                    try:
-                        os.remove(self.output_file)
-                        print(f"Removed existing output file: {self.output_file}")
-                    except (OSError, PermissionError) as e:
-                        print(f"Warning: Could not remove existing output file: {self.output_file}. Error: {str(e)}")
-                        # We'll continue and let CHDMAN handle it with the -f flag
-                
-                # Ensure output directory exists
-                output_dir = os.path.dirname(self.output_file)
-                if output_dir:
-                    if not os.path.exists(output_dir):
-                        try:
-                            os.makedirs(output_dir, exist_ok=True)
-                        except OSError as e:
-                            raise CHDManOutputFileError(f"Cannot create output directory: {output_dir}. {str(e)}")
-                    
-                    # Check if we have write permission to the output directory
-                    if not os.access(output_dir, os.W_OK):
-                        raise CHDManOutputFileError(f"No write permission for output directory: {output_dir}")
-                    
-                    # Try to create a test file to verify write access
-                    import time as _time  # Local import to avoid conflicts
-                    test_file = os.path.join(output_dir, f".test_write_{int(_time.time())}")
-                    try:
-                        with open(test_file, 'w') as f:
-                            f.write('test')
-                        os.remove(test_file)  # Clean up test file
-                    except (OSError, PermissionError) as e:
-                        raise CHDManOutputFileError(f"Cannot write to output directory: {output_dir}. Error: {str(e)}")
+                algo_name = corrected_name
             
-            # Build command
-            cmd = [self.executable_path, self.command]
-            
-            # Add input file
-            cmd.extend(["-i", self.input_file])
-            
-            # Add output file if specified
-            if self.output_file:
-                cmd.extend(["-o", self.output_file])
-                
-            # Add compression if specified and supported
-            if self.compression:
-                # Check if this is a comma-separated list of algorithms
-                if ',' in self.compression:
-                    original_algorithms = self.compression.split(',')
-                    valid_algorithms = ["none", "zlib", "zstd", "lzma", "huff", "flac", "cdlz", "cdzl", "cdfl", "avhu"]
-                    corrected_algorithms = []
-                    
-                    # Validate each algorithm and correct if needed
-                    for algo_name in original_algorithms:
-                        algo_name = algo_name.strip().lower()  # Clean up
-                        if algo_name not in valid_algorithms:
-                            # Provide helpful error message for common mistakes
-                            if algo_name == "cdzlib":
-                                print("Warning: 'cdzlib' is not a valid algorithm. Did you mean 'cdzl'? Correcting automatically.")
-                                corrected_algorithms.append("cdzl")
-                            elif algo_name == "cdflac":
-                                print("Warning: 'cdflac' is not a valid algorithm. Did you mean 'cdfl'? Correcting automatically.")
-                                corrected_algorithms.append("cdfl")
-                            else:
-                                raise ValueError(f"Invalid compression algorithm: {algo_name}. Valid options are: {', '.join(valid_algorithms)}")
-                        else:
-                            corrected_algorithms.append(algo_name)
-                    
-                    # CHDMAN expects multiple algorithms as a single comma-separated parameter
-                    algorithms_str = ','.join(corrected_algorithms)
-                    cmd.extend(["-c", algorithms_str])
-                    print(f"Using multiple compression algorithms: {algorithms_str}")
-                else:
-                    # Single algorithm
-                    valid_algorithms = ["none", "zlib", "zstd", "lzma", "huff", "flac", "cdlz", "cdzl", "cdfl", "avhu"]
-                    algo_name = self.compression.strip().lower()  # Clean up
-                    if algo_name not in valid_algorithms:
-                        # Provide helpful error message for common mistakes
-                        if algo_name == "cdzlib":
-                            print("Warning: 'cdzlib' is not a valid algorithm. Did you mean 'cdzl'? Correcting automatically.")
-                            algo_name = "cdzl"
-                        elif algo_name == "cdflac":
-                            print("Warning: 'cdflac' is not a valid algorithm. Did you mean 'cdfl'? Correcting automatically.")
-                            algo_name = "cdfl"
-                        else:
-                            raise ValueError(f"Invalid compression algorithm: {algo_name}. Valid options are: {', '.join(valid_algorithms)}")
-                    
-                    cmd.extend(["-c", algo_name])
-                    print(f"Using compression algorithm: {algo_name}")
-                
-            # Add hunk size if specified
-            if self.hunk_size:
-                cmd.extend(["-hs", str(self.hunk_size)])
-                
-            # Add force flag if specified
-            if self.force:
-                cmd.append("-f")
-                
-            # Only add verbose flag for commands that support it
-            # Currently, only info and verify commands reliably support the -v flag
-            if self.verbose and self.command in ["info", "verify"]:
-                cmd.append("-v")
-                
-            # Add additional parameters
-            for key, value in self.kwargs.items():
-                if value is not None:
-                    cmd.extend([f"-{key}", str(value)])
-            
-            # Format the command string with proper quoting for display
-            cmd_str = " ".join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
+            if algo_name not in CHDManWorker.VALID_COMPRESSION_ALGORITHMS:
+                valid_options_str = ', '.join(CHDManWorker.VALID_COMPRESSION_ALGORITHMS)
+                raise ValueError(
+                    f"Invalid compression algorithm: '{original_algo_name}'. "
+                    f"Valid options are: {valid_options_str}"
+                )
+            processed_algorithms.append(algo_name)
         
-            # Emit started signal with a clean, formatted command string
-            self.signals.started.emit(f"Running: {cmd_str}")
-            
-            # Print detailed information in verbose mode
-            if self.verbose:
-                print("\n=== CHDMAN DETAILED INFORMATION ===")
-                print(f"Command: {cmd_str}")
-                print(f"Executable: {self.executable_path}")
-                print(f"Operation: {self.command}")
-                print(f"Input file: {self.input_file}")
-                if self.output_file:
-                    print(f"Output file: {self.output_file}")
-                print(f"Force flag: {self.force}")
-                if self.compression:
-                    print(f"Compression algorithms: {self.compression}")
-                if self.hunk_size:
-                    print(f"Hunk size: {self.hunk_size}")
-                for key, value in self.kwargs.items():
-                    if value is not None:
-                        print(f"Additional parameter - {key}: {value}")
-                print("==================================\n")
-            else:
-                # Print basic command for debugging
-                print(f"CHDMAN COMMAND: {cmd_str}")
-                print(f"Force flag: {self.force}")
-                print(f"Compression: {self.compression}")
-            
-            # Start process with non-blocking I/O
-            self.process = subprocess.Popen(
-                cmd, 
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-            
-            # Collect all output for error reporting
-            all_output = []
-            error_output = []
-            
-            # Log the process ID for debugging
-            print(f"CHDMAN process started with PID: {self.process.pid}")
-            self.signals.progress.emit(0, f"Started CHDMAN process (PID: {self.process.pid})")
-            
-            # Monitor progress with a cross-platform approach using threading
-            import time
-            import threading
-            import queue
-            
-            # Create queues for stdout and stderr
-            stdout_queue = queue.Queue()
-            stderr_queue = queue.Queue()
-            
-            # Keep track of last progress update time to periodically send updates even if no new output
-            last_progress_time = time.time()
-            last_progress_value = 0
-            
-            # Function to read from a stream and put lines into a queue
-            def read_stream(stream, output_queue):
-                # Set stream to binary mode to avoid encoding issues
+        return ','.join(processed_algorithms)
+
+    def _perform_pre_flight_checks(self) -> None:
+        self.logger.debug(f'Worker {self.worker_id}: Performing pre-flight checks...')
+        if shutil.which(self.executable_path) is None:
+            raise CHDManExecutableNotFoundError(f"Cannot find '{self.executable_path}' in PATH.")
+        if not os.path.exists(self.input_file):
+            raise CHDManInputFileError(f'Input file not found: {self.input_file}')
+        if self.output_file:
+            if os.path.exists(self.output_file) and self.force:
                 try:
-                    for line in iter(stream.readline, b'' if hasattr(stream, 'mode') and 'b' in stream.mode else ''):
-                        if line:
-                            # Handle both bytes and strings
-                            try:
-                                if isinstance(line, bytes):
-                                    decoded_line = line.decode('utf-8', errors='replace').strip()
-                                else:
-                                    # Already a string, just strip it
-                                    decoded_line = line.strip()
-                                    
-                                if decoded_line:  # Only queue non-empty lines
-                                    output_queue.put(decoded_line)
-                            except Exception as e:
-                                print(f"Error processing line: {e}")
-                                # Try to queue the raw line as a fallback
-                                try:
-                                    output_queue.put(str(line))
-                                except Exception:
-                                    pass
-                except Exception as e:
-                    print(f"Error reading from stream: {e}")
-                output_queue.put(None)  # Signal end of stream
-            
-            # Start threads to read from stdout and stderr
-            stdout_thread = threading.Thread(target=read_stream, args=(self.process.stdout, stdout_queue))
-            stderr_thread = threading.Thread(target=read_stream, args=(self.process.stderr, stderr_queue))
-            stdout_thread.daemon = True
-            stderr_thread.daemon = True
-            stdout_thread.start()
-            stderr_thread.start()
-            
-            # Flag to track if we've reached the end of both streams
-            stdout_done = False
-            stderr_done = False
-            
-            # Continue until process completes and all output is processed
-            while self.process.poll() is None or not (stdout_done and stderr_done):
-                # Check if cancelled
-                if self.cancelled:
-                    print(f"Cancellation detected for process {self.process.pid}, terminating...")
-                    try:
-                        self.process.terminate()
-                        # Wait briefly to see if it terminates
-                        for i in range(5):
-                            if self.process.poll() is not None:
-                                print("Process terminated gracefully after cancel")
-                                break
-                            time.sleep(0.1)
-                            
-                        # If still running, force kill
-                        if self.process.poll() is None:
-                            print("Process still running after cancel, force killing...")
-                            self.process.kill()
-                    except Exception as e:
-                        print(f"Error terminating process during cancellation: {e}")
-                        
-                    self.signals.error.emit("Operation cancelled by user")
-                    return
-                
-                # Process any available stdout data
+                    os.remove(self.output_file)
+                    self.logger.info(
+                        f'Worker {self.worker_id}: Removed existing output: '
+                        f'{self.output_file} (force).'
+                    )
+                except (OSError, PermissionError) as e:
+                    self.logger.warning(f'Worker {self.worker_id}: Could not remove {self.output_file}: {e}')
+            output_dir = os.path.dirname(self.output_file)
+            if output_dir:
+                if not os.path.exists(output_dir):
+                    try: os.makedirs(output_dir, exist_ok=True)
+                    except OSError as e: raise CHDManOutputFileError(f'Cannot create output dir: {output_dir}. {e}')
+                if not os.access(output_dir, os.W_OK):
+                    raise CHDManOutputFileError(f'No write permission for output dir: {output_dir}')
+                # Use global time import
+                test_file = os.path.join(output_dir, f'.test_write_{int(time.time())}')
                 try:
-                    # Non-blocking get with timeout
-                    line = stdout_queue.get(block=True, timeout=0.1)
-                    if line is None:
-                        stdout_done = True
-                    else:
-                        all_output.append(line)
-                        # Parse progress information
-                        progress = self._parse_progress(line)
-                        if progress is not None:
-                            last_progress_value = progress
-                            last_progress_time = time.time()
-                            self.signals.progress.emit(progress, line)
-                        elif line:  # Only emit non-empty lines
-                            self.signals.progress.emit(-1, line)  # -1 indicates no progress value
-                            # Print additional details in verbose mode
-                            if self.verbose and not line.startswith("Processing:"):
-                                print(f"CHDMAN OUTPUT: {line}")
-                except queue.Empty:
-                    pass  # No stdout data available
-                
-                # Process any available stderr data
-                try:
-                    # Non-blocking get with timeout
-                    line = stderr_queue.get(block=False)
-                    if line is None:
-                        stderr_done = True
-                    else:
-                        all_output.append(line)
-                        error_output.append(line)
-                        
-                        # Check if this is a real error or just progress information
-                        # CHDMAN sometimes outputs progress information to stderr
-                        if "Compressing" in line or "complete" in line or "ratio=" in line:
-                            # This is likely progress information, not an error
-                            self.signals.progress.emit(-1, line)
-                        else:
-                            # This is likely a real error
-                            error_msg = f"ERROR: {line}"
-                            self.signals.progress.emit(-1, error_msg)
-                            
-                        # Print additional details in verbose mode
-                        if self.verbose:
-                            print(f"CHDMAN STDERR: {line}")
-                except queue.Empty:
-                    pass  # No stderr data available
-                
-                # If no progress update for 2 seconds, send a heartbeat
-                if time.time() - last_progress_time > 2:
-                    # Only send heartbeat if not cancelled
-                    if not self.cancelled:
-                        self.signals.progress.emit(last_progress_value, "Processing... (still working)")
-                        last_progress_time = time.time()
-                    
-                # Don't hog the CPU
-                time.sleep(0.05)
-            
-            # Process any remaining output after process completion
-            # Wait for the stdout and stderr threads to finish
-            stdout_thread.join(timeout=1.0)
-            stderr_thread.join(timeout=1.0)
-            
-            # Process any remaining items in the queues
+                    with open(test_file, 'w') as f: f.write('test')
+                    os.remove(test_file)
+                except (OSError, PermissionError) as e:
+                    raise CHDManOutputFileError(f'Cannot write to output dir: {output_dir}. {e}')
+        self.logger.debug(f'Worker {self.worker_id}: Pre-flight checks passed.')
+
+    def _build_chdman_command(self) -> List[str]:
+        self.logger.debug(f'Worker {self.worker_id}: Building CHDMAN command...')
+        cmd = [self.executable_path, self.command, '-i', self.input_file]
+        if self.output_file: cmd.extend(['-o', self.output_file])
+
+        if self.compression:
             try:
-                while not stdout_queue.empty():
-                    line = stdout_queue.get_nowait()
-                    if line is None:
-                        continue
+                validated_compression_str = CHDManWorker._sanitize_compression_algorithms(self.compression)
+                if validated_compression_str:
+                    cmd.extend(['-c', validated_compression_str])
+                    self.logger.info(
+                        f'Worker {self.worker_id}: Using sanitized compression '
+                        f'algorithms: {validated_compression_str}'
+                    )
+            except ValueError as e: 
+                self.logger.error(f'Worker {self.worker_id}: Compression algorithm validation failed: {e}')
+                raise CHDManError(f'Compression algorithm validation failed: {e}')
+
+
+        if self.hunk_size: cmd.extend(['-hs', str(self.hunk_size)])
+        if self.force: cmd.append('-f')
+        if self.verbose and self.command in ['info', 'verify']: cmd.append('-v')
+        for key, value in self.kwargs.items():
+            if value is not None: cmd.extend([f'-{key}', str(value)])
+        
+        cmd_str_for_log = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
+        self.logger.debug(f'Worker {self.worker_id}: CHDMAN command built: {cmd_str_for_log}')
+        return cmd
+
+    def _execute_and_monitor_process(self, cmd: List[str]) -> tuple[int, List[str]]:
+        cmd_str_for_logging = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
+        self.logger.debug(f'Worker {self.worker_id}: === CHDMAN DETAILED INFORMATION ===')
+        self.logger.debug(f'Worker {self.worker_id}: Command: {cmd_str_for_logging}')
+        self.logger.debug(f'Worker {self.worker_id}: Executable: {self.executable_path}')
+        self.logger.debug(f'Worker {self.worker_id}: ==================================')
+        self.logger.info(f'Worker {self.worker_id}: CHDMAN COMMAND: {cmd_str_for_logging}')
+        
+        all_output: List[str] = []
+        self.process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+            text=True, bufsize=1, universal_newlines=True
+        )
+        self.logger.info(f'Worker {self.worker_id}: CHDMAN process started with PID: {self.process.pid}')
+        self.signals.progress.emit(0.0, f'Started CHDMAN process (PID: {self.process.pid})')
+
+        stdout_queue: queue.Queue[Optional[str]] = queue.Queue()
+        stderr_queue: queue.Queue[Optional[str]] = queue.Queue()
+        last_progress_time = time.time()
+        last_progress_value = 0.0
+
+        def read_stream_local(stream, output_queue: queue.Queue[Optional[str]], worker_self: CHDManWorker):
+            try:
+                for line_bytes in iter(stream.readline, b'' if hasattr(stream, 'mode') and 'b' in stream.mode else ''):
+                    if line_bytes:
+                        try:
+                            line_str = line_bytes.decode('utf-8', errors='replace').strip() if isinstance(line_bytes, bytes) else str(line_bytes).strip()
+                            if line_str: output_queue.put(line_str)
+                        except Exception as e:
+                            worker_self.logger.error(f'Error processing line: {line_bytes!r} - {e}', exc_info=True)
+                            try: output_queue.put(str(line_bytes)) 
+                            except Exception: pass
+            except Exception as e: worker_self.logger.error(f'Error reading from stream: {e}', exc_info=True)
+            finally: output_queue.put(None)
+
+        stdout_thread = threading.Thread(target=read_stream_local, args=(self.process.stdout, stdout_queue, self))
+        stderr_thread = threading.Thread(target=read_stream_local, args=(self.process.stderr, stderr_queue, self))
+        stdout_thread.daemon, stderr_thread.daemon = True, True
+        stdout_thread.start(); stderr_thread.start()
+
+        stdout_done, stderr_done = False, False
+        while self.process.poll() is None or not (stdout_done and stderr_done):
+            if self.cancelled:
+                self.logger.info(f'Worker {self.worker_id}: Cancellation for PID {self.process.pid}, terminating...')
+                try:
+                    self.process.terminate()
+                    time.sleep(0.1); Popen_poll = self.process.poll() 
+                    if Popen_poll is None: time.sleep(0.4); Popen_poll = self.process.poll()
+                    if Popen_poll is None: self.process.kill()
+                except Exception as e: self.logger.error(f'Worker {self.worker_id}: Error terminating: {e}', exc_info=True)
+                self.signals.error.emit('Operation cancelled by user')
+                stdout_thread.join(timeout=1.0); stderr_thread.join(timeout=1.0)
+                return -1, all_output 
+            try:
+                line = stdout_queue.get(block=True, timeout=0.05)
+                if line is None: stdout_done = True
+                else:
                     all_output.append(line)
                     progress = self._parse_progress(line)
                     if progress is not None:
+                        last_progress_value, last_progress_time = progress, time.time()
                         self.signals.progress.emit(progress, line)
-                    else:
-                        self.signals.progress.emit(-1, line)
-                    if self.verbose:
-                        print(f"CHDMAN FINAL OUTPUT: {line}")
-            except Exception as e:
-                print(f"Error processing remaining stdout: {e}")
-                
+                    elif line: 
+                        self.signals.progress.emit(-1.0, line)
+                        if not line.startswith('Processing:'): self.logger.debug(f'Worker {self.worker_id}: STDOUT: {line}')
+            except queue.Empty: pass
             try:
-                while not stderr_queue.empty():
-                    line = stderr_queue.get_nowait()
-                    if line is None:
-                        continue
-                    all_output.append(line)
-                    error_output.append(line)
-                    self.signals.progress.emit(-1, f"ERROR: {line}")
-                    if self.verbose:
-                        print(f"CHDMAN FINAL ERROR: {line}")
-            except Exception as e:
-                print(f"Error processing remaining stderr: {e}")
-            
-            # Wait for process to complete
-            return_code = self.process.wait()
-            print(f"CHDMAN process completed with return code: {return_code}")
-            
-            # Check if process was cancelled
-            if self.cancelled:
-                print("Process was cancelled, not sending completion signal")
-                return
-            
-            # Get error output if any
-            try:
-                stderr_output = self.process.stderr.read().strip() if self.process.stderr else ""
-                if stderr_output:
-                    all_output.append("\nError output:")
-                    all_output.append(stderr_output)
-            except Exception as e:
-                print(f"Error reading stderr after completion: {e}")
-                stderr_output = ""
-            
-            # For chdman, return code 1 can be normal when displaying help or with missing parameters
-            # Only treat as error if it's not expected or if there's actual error output
-            try:
-                if return_code == 0 or (return_code == 1 and "Usage:" in "\n".join(all_output) and not stderr_output):
-                    print("CHDMAN process completed successfully, emitting finished signal")
-                    self.signals.finished.emit(True, "Operation completed successfully")
-                    return  # Return here to avoid raising an exception
+                line = stderr_queue.get(block=True, timeout=0.05)
+                if line is None: stderr_done = True
                 else:
-                    error_output = "\n".join(all_output)
-                    error_message = f"CHDMAN command failed with return code {return_code}"
-                    if error_output:
-                        error_message += f":\n{error_output}"
-                    
-                    # Check for specific error types and provide more helpful messages
-                    if "Permission denied" in error_output or "Access is denied" in error_output.lower():
-                        # Add more helpful information for permission errors
-                        if self.output_file:
-                            output_dir = os.path.dirname(self.output_file)
-                            error_message += f"\n\nPermission error: Unable to write to {output_dir}."
-                            error_message += "\nPlease try:"
-                            error_message += "\n1. Choose a different output directory where you have write permissions"
-                            error_message += "\n2. Run the application as administrator"
-                            error_message += "\n3. Check if the drive is write-protected"
-                            error_message += "\n4. Ensure the output file is not currently in use by another process"
-                    
-                    # Check for missing input file errors
-                    if "No such file or directory" in error_output or "cannot open" in error_output.lower():
-                        error_message += "\n\nInput file error: The specified input file could not be opened."
-                        error_message += "\nPlease check that the file exists and is accessible."
-                    
-                    # Raise custom exception for error handling
-                    cmd_str = " ".join(cmd)
-                    raise CHDManCommandError(cmd_str, return_code, error_output)
-            except CHDManError as e:
-                # This will be caught by the outer try/except block
-                raise e
-                
-        except CHDManError as e:
-            # Handle custom exceptions
-            self.signals.error.emit(str(e))
-        except FileNotFoundError as e:
-            # Handle file not found errors
-            self.signals.error.emit(f"File not found: {str(e)}")
-        except PermissionError as e:
-            # Handle permission errors
-            self.signals.error.emit(f"Permission error: {str(e)}")
-        except OSError as e:
-            # Handle OS errors
-            self.signals.error.emit(f"OS error: {str(e)}")
-        except Exception as e:
-            # Handle other exceptions
-            self.signals.error.emit(f"Error executing CHDMAN: {str(e)}")
+                    all_output.append(line) 
+                    if 'Compressing' in line or 'complete' in line or 'ratio=' in line: self.signals.progress.emit(-1.0, line) 
+                    else: self.signals.progress.emit(-1.0, f'ERROR: {line}') 
+                    self.logger.debug(f'Worker {self.worker_id}: STDERR: {line}')
+            except queue.Empty: pass
+            if time.time() - last_progress_time > 2 and not self.cancelled:
+                self.signals.progress.emit(last_progress_value, 'Processing... (still working)')
+                last_progress_time = time.time()
+        stdout_thread.join(timeout=1.0); stderr_thread.join(timeout=1.0)
+        try:
+            while True: 
+                line = stdout_queue.get_nowait()
+                if line is None: break
+                all_output.append(line) 
+                progress = self._parse_progress(line)
+                self.signals.progress.emit(progress if progress is not None else -1.0, line)
+                if not line.startswith('Processing:'): self.logger.debug(f'Worker {self.worker_id}: FINAL STDOUT: {line}')
+        except queue.Empty: pass
+        except Exception as e: self.logger.error(f'Worker {self.worker_id}: Error draining stdout: {e}', exc_info=True)
+        try:
+            while True: 
+                line = stderr_queue.get_nowait()
+                if line is None: break
+                all_output.append(line) 
+                self.signals.progress.emit(-1.0, f'ERROR: {line}')
+                self.logger.debug(f'Worker {self.worker_id}: FINAL STDERR: {line}')
+        except queue.Empty: pass
+        except Exception as e: self.logger.error(f'Worker {self.worker_id}: Error draining stderr: {e}', exc_info=True)
+        return_code = self.process.wait()
+        self.logger.info(f'Worker {self.worker_id}: Process PID {self.process.pid} completed with code: {return_code}')
+        return return_code, all_output
+
+    def _handle_process_completion(self, return_code: int, all_output: List[str], cmd_str: str) -> None:
+        if return_code == -1 and self.cancelled: 
+            self.logger.info(f'Worker {self.worker_id}: Cancelled during execution. Error signal emitted from monitor.')
+            return 
+        if self.cancelled:
+            self.logger.info(f'Worker {self.worker_id}: Completion aborted (cancelled). Emitting error.')
+            if not self.signals.error.isBlocked(): self.signals.error.emit('Operation cancelled by user')
+            return
+        output_str = '\n'.join(filter(None,all_output)) 
+        is_usage_message = 'Usage:' in output_str
+        is_non_error_rc1 = return_code == 1 and is_usage_message and not any(kw in output_str.lower() for kw in ['error:', 'failed', 'cannot open'])
+        if return_code == 0 or is_non_error_rc1:
+            self.logger.info(f"Worker {self.worker_id}: Success for '{cmd_str}'.")
+            self.signals.finished.emit(True, 'Operation completed successfully')
+        else:
+            error_message = f"CHDMAN command '{cmd_str}' failed (code {return_code})"
+            if output_str: error_message += f':\n{output_str}'
+            if 'Permission denied' in output_str or 'Access is denied' in output_str.lower():
+                if self.output_file:
+                    error_message += (f'\n\nPermission error: Write to {os.path.dirname(self.output_file)} denied.')
+            elif 'No such file or directory' in output_str or 'cannot open' in output_str.lower():
+                error_message += ('\n\nInput file error: File not found or inaccessible.')
+            self.logger.error(f'Worker {self.worker_id}: {error_message}')
+            self.signals.error.emit(error_message) 
+            raise CHDManCommandError(cmd_str, return_code, output_str)
+
+    @Slot()
+    def run(self):
+        if getattr(self, '_has_run', False):
+            self.logger.debug(f'Worker {self.worker_id}: Already ran. Skipping.')
+            return
+        self._has_run = True
+        cmd_list: List[str] = [] 
+        cmd_str_for_signal_and_error: str = ''
+        try:
+            self.logger.info(f"Worker {self.worker_id}: Starting: {self.command} on {self.input_file}")
+            self._perform_pre_flight_checks()
+            cmd_list = self._build_chdman_command()
+            cmd_str_for_signal_and_error = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd_list])
+            self.signals.started.emit(f'Running: {cmd_str_for_signal_and_error}')
+            return_code, all_output = self._execute_and_monitor_process(cmd_list)
+            self._handle_process_completion(return_code, all_output, cmd_str_for_signal_and_error)
+        except CHDManError as e: 
+            self.logger.error(f"Worker {self.worker_id}: CHDManError for '{cmd_str_for_signal_and_error}': {e}", exc_info=True) 
+            if not self.signals.error.isBlocked(): self.signals.error.emit(str(e))
+        except Exception as e: 
+            self.logger.exception(f"Worker {self.worker_id}: Unexpected error for '{cmd_str_for_signal_and_error}'") 
+            if not self.signals.error.isBlocked(): self.signals.error.emit(f'Unexpected error: {str(e)}')
+        finally:
+            self.logger.info(f"Worker {self.worker_id}: Finished: {self.command} on {self.input_file}")
             
     def cancel(self):
-        """Cancel the running operation."""
         self.cancelled = True
+        self.logger.info(f"Worker {self.worker_id}: Marked for cancellation: {self.command} on {self.input_file}.")
     
     def _parse_progress(self, line: str) -> Optional[float]:
-        """Parse progress information from CHDMAN output.
-        
-        Args:
-            line: Line of output from CHDMAN
-            
-        Returns:
-            Progress percentage (0-100) or None if no progress info found
-        """
-        # Different CHDMAN commands have different progress formats
-        # Try to match common patterns
-        
-        # Skip empty lines
-        if not line or not line.strip():
-            return None
-            
-        # Log the line for debugging
-        print(f"CHDMAN output: {line}")
-        
-        # Pattern: "Compressing, 45.3% complete..." (createcd, createdvd, etc.)
+        if not line or not line.strip(): return None
+        self.logger.debug(f'Worker {self.worker_id}: Parsing progress: {line}')
         match = re.search(r'(\d+(\.\d+)?)% complete', line)
-        if match:
-            return float(match.group(1))
-        
-        # Pattern: "Compression complete ... (100%)" (end of compression)
+        if match: return float(match.group(1))
         match = re.search(r'\((\d+)%\)', line)
-        if match:
-            return float(match.group(1))
-        
-        # Pattern: "Block 1000/2000" (extractcd, extractdvd, etc.)
+        if match: return float(match.group(1))
         match = re.search(r'Block (\d+)/(\d+)', line)
-        if match:
-            current = int(match.group(1))
-            total = int(match.group(2))
-            if total > 0:
-                return (current / total) * 100
-        
-        # Pattern: "Compressing sector 1000/2000" (some versions of CHDMAN)
+        if match: current, total = int(match.group(1)), int(match.group(2)); return (current/total)*100 if total > 0 else 0.0
         match = re.search(r'sector (\d+)/(\d+)', line, re.IGNORECASE)
-        if match:
-            current = int(match.group(1))
-            total = int(match.group(2))
-            if total > 0:
-                return (current / total) * 100
-                
-        # Pattern: "Processing track 1/10" (some versions of CHDMAN)
+        if match: current, total = int(match.group(1)), int(match.group(2)); return (current/total)*100 if total > 0 else 0.0
         match = re.search(r'track (\d+)/(\d+)', line, re.IGNORECASE)
-        if match:
-            current = int(match.group(1))
-            total = int(match.group(2))
-            if total > 0:
-                return (current / total) * 100
-                
-        # If we detect the start of processing, return 1% to show something is happening
-        if "processing" in line.lower() or "compressing" in line.lower():
-            return 1.0
-            
-        # If we see "Input" or "Output" lines, it means we're starting, so return 0%
-        if line.startswith("Input") or line.startswith("Output"):
-            return 0.0
-                
+        if match: current, total = int(match.group(1)), int(match.group(2)); return (current/total)*100 if total > 0 else 0.0
+        if 'processing' in line.lower() or 'compressing' in line.lower(): return 1.0
+        if line.startswith('Input') or line.startswith('Output'): return 0.0
         return None
 
-
 class CHDMan:
-    """Wrapper for the CHDMAN command-line utility.
-    
-    Provides a Pythonic interface to CHDMAN operations including
-    compression, extraction, verification, and information retrieval.
-    """
-    
-    # Define available commands
+    """Wrapper for the CHDMAN command-line utility."""
     COMMANDS = {
-        "createcd": CHDManCommand("createcd", "Create CHD from CD image", True, True, True),
-        "createdvd": CHDManCommand("createdvd", "Create CHD from DVD image", True, True, True),
-        "createhd": CHDManCommand("createhd", "Create CHD from hard disk image", True, True, True),
-        "createld": CHDManCommand("createld", "Create CHD from laserdisc image", True, True, True),
-        "extractcd": CHDManCommand("extractcd", "Extract CD image from CHD", True, True, False),
-        "extractdvd": CHDManCommand("extractdvd", "Extract DVD image from CHD", True, True, False),
-        "extracthd": CHDManCommand("extracthd", "Extract hard disk image from CHD", True, True, False),
-        "extractld": CHDManCommand("extractld", "Extract laserdisc image from CHD", True, True, False),
-        "extractraw": CHDManCommand("extractraw", "Extract raw data from CHD", True, True, False),
-        "info": CHDManCommand("info", "Display information about a CHD", True, False, False),
-        "verify": CHDManCommand("verify", "Verify CHD integrity", True, False, False),
+        'createcd': CHDManCommand('createcd', 'Create CHD from CD image', True, True, True),
+        'createdvd': CHDManCommand('createdvd', 'Create CHD from DVD image', True, True, True),
+        'createhd': CHDManCommand('createhd', 'Create CHD from hard disk image', True, True, True),
+        'createld': CHDManCommand('createld', 'Create CHD from laserdisc image', True, True, True),
+        'extractcd': CHDManCommand('extractcd', 'Extract CD image from CHD', True, True, False),
+        'extractdvd': CHDManCommand('extractdvd', 'Extract DVD image from CHD', True, True, False),
+        'extracthd': CHDManCommand('extracthd', 'Extract hard disk image from CHD', True, True, False),
+        'extractld': CHDManCommand('extractld', 'Extract laserdisc image from CHD', True, True, False),
+        'extractraw': CHDManCommand('extractraw', 'Extract raw data from CHD', True, True, False),
+        'info': CHDManCommand('info', 'Display information about a CHD', True, False, False),
+        'verify': CHDManCommand('verify', 'Verify CHD integrity', True, False, False),
     }
     
-    # Define available compression algorithms
-    COMPRESSION_ALGORITHMS = [
-        "none",
-        "zlib",
-        "zstd",
-        "lzma",
-        "huff",
-        "flac",
-        "cdlz",
-        "cdfl",
-        "avhu",
-    ]
-    
     def __init__(self, executable_path: Optional[str] = None, verbose: bool = False):
-        """Initialize the CHDMan wrapper.
-        
-        Args:
-            executable_path: Path to the CHDMAN executable (if None, load from settings)
-            verbose: Whether to enable verbose output
-        """
-        # Use persisted path if not explicitly provided
-        if executable_path is None or executable_path.strip() == "":
+        if executable_path is None or executable_path.strip() == '':
             persisted_path = load_chdman_path()
-            if persisted_path:
-                self.executable_path = persisted_path
-            else:
-                self.executable_path = "chdman"  # fallback
+            self.executable_path = persisted_path if persisted_path else 'chdman'
         else:
             self.executable_path = executable_path
-        self.verbose = verbose
+        self.verbose = verbose 
         self.thread_pool = QThreadPool()
-        self.active_workers = {}  # Track active workers by task id
-        # Log the path used for CHDMAN
-        try:
-            with open('error.log', 'a', encoding='utf-8') as logf:
-                logf.write(f"[CHDMan] Initialized with executable_path: {self.executable_path}\n")
-        except Exception:
-            pass
+        self.active_workers: Dict[str, CHDManWorker] = {}
+        self._workers_lock = threading.Lock() 
+        self.logger = logging.getLogger(__name__ + '.CHDMan')
+        self.logger.info(f'Initialized with executable_path: {self.executable_path}, verbose: {self.verbose}')
     
+    def _create_and_start_worker(
+        self,
+        command: str,
+        input_file: str,
+        output_file: Optional[str] = None,
+        compression: Optional[str] = None,
+        hunk_size: Optional[int] = None,
+        force: bool = False,
+        worker_id_suffix: Optional[str] = None,
+        **kwargs 
+    ) -> CHDManWorker:
+        base_worker_id = worker_id_suffix or os.path.basename(input_file) 
+        worker_id = f'{command}_{base_worker_id}'
+        
+        worker = CHDManWorker(
+            executable_path=self.executable_path,
+            command=command,
+            input_file=input_file,
+            output_file=output_file,
+            compression=compression,
+            hunk_size=hunk_size,
+            force=force,
+            verbose=self.verbose, 
+            worker_id=worker_id,
+            **kwargs
+        )
+        
+        with self._workers_lock:
+            self.active_workers[worker.worker_id] = worker
+        
+        worker.signals.finished.connect(lambda success, msg, w_id=worker.worker_id: self._remove_worker_by_id(w_id))
+        worker.signals.error.connect(lambda msg, w_id=worker.worker_id: self._remove_worker_by_id(w_id))
+        
+        self.thread_pool.start(worker)
+        self.logger.info(f'Started worker {worker.worker_id} for command {command} on {input_file}')
+        return worker
+
     def terminate_all_chdman_processes(self):
-        """Find and terminate all CHDMAN processes running on the system.
+        self.logger.info('CHDMan: Terminating all processes...')
+        with self._workers_lock: 
+            workers_to_cancel = list(self.active_workers.values())
         
-        This is more aggressive than cleanup() as it will terminate ALL CHDMAN processes,
-        not just those started by this instance of the application.
-        """
-        print("CHDMan: Searching for and terminating all CHDMAN processes...")
+        for worker in workers_to_cancel:
+            if worker: worker.cancelled = True 
+            self.logger.info(f'Marked worker {worker.worker_id} as cancelled.')
         
-        # First mark all active workers as cancelled
-        for worker in self.active_workers:
-            if worker and hasattr(worker, 'cancelled'):
-                worker.cancelled = True
-                print(f"Marked worker as cancelled: {worker}")
-        
-        # Then try to terminate processes directly
         try:
-            # First try using platform-specific commands (more reliable)
-            if os.name == 'nt':  # Windows
-                # Use taskkill to terminate all chdman processes
-                print("Using taskkill to terminate chdman.exe processes")
-                result = subprocess.run(['taskkill', '/F', '/IM', 'chdman.exe'], 
-                              stdout=subprocess.PIPE, 
-                              stderr=subprocess.PIPE,
-                              text=True,
-                              check=False)
-                print(f"Taskkill result: {result.returncode}")
-                if result.stdout:
-                    print(f"Taskkill output: {result.stdout}")
-                if result.stderr:
-                    print(f"Taskkill error: {result.stderr}")
-            else:  # Unix-like
-                # Use pkill to terminate all chdman processes
-                print("Using pkill to terminate chdman processes")
-                result = subprocess.run(['pkill', '-9', 'chdman'],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              text=True,
-                              check=False)
-                print(f"Pkill result: {result.returncode}")
-                if result.stdout:
-                    print(f"Pkill output: {result.stdout}")
-                if result.stderr:
-                    print(f"Pkill error: {result.stderr}")
-            print("Terminated CHDMAN processes using system commands")
+            cmd_args = ['taskkill', '/F', '/IM', 'chdman.exe'] if os.name == 'nt' else ['pkill', '-9', 'chdman']
+            action = 'taskkill' if os.name == 'nt' else 'pkill'
+            self.logger.info(f'Using {action} to terminate chdman processes')
+            result = subprocess.run(cmd_args, capture_output=True, text=True, check=False)
+            self.logger.debug(f'{action} result: {result.returncode}, STDOUT: {result.stdout}, STDERR: {result.stderr}')
         except Exception as e:
-            print(f"Warning: Failed to terminate CHDMAN processes using system commands: {e}")
-            # Fall back to just cleaning up our own processes
-            self.cleanup()
-    
-    def _validate_compression_algorithms(self, compression: str):
-        """Validate compression algorithms, handling comma-separated lists.
+            self.logger.warning(f'Failed {action}: {e}', exc_info=True)
         
-        Args:
-            compression: Compression algorithm(s) to validate, can be comma-separated
-            
-        Raises:
-            ValueError: If any algorithm in the list is invalid
-        """
-        if not compression:
-            return
-            
-        # Split by comma if multiple algorithms are specified
-        algorithms = compression.split(',')
-        
-        # Validate each algorithm
-        for algo in algorithms:
-            algo = algo.strip().lower()
-            if algo not in self.COMPRESSION_ALGORITHMS:
-                # Special case handling for common typos
-                if algo == 'cdzlib':
-                    print("Warning: 'cdzlib' is not a valid algorithm. Did you mean 'cdzl'? Correcting automatically.")
-                elif algo == 'cdflac':
-                    print("Warning: 'cdflac' is not a valid algorithm. Did you mean 'cdfl'? Correcting automatically.")
-                else:
-                    valid_algorithms = ', '.join(self.COMPRESSION_ALGORITHMS)
-                    raise ValueError(f"Invalid compression algorithm: {algo}. Valid options are: {valid_algorithms}")
+        self.cleanup() 
     
     def cleanup(self):
-        """Terminate all running CHDMAN processes.
-        
-        This should be called when the application is closing to ensure
-        all CHDMAN processes are properly terminated.
-        """
-        print("Cleaning up CHDManager resources...")
-        
-        # Cancel all active workers
-        for worker in list(self.active_workers):
-            if hasattr(worker, 'cancel'):
-                worker.cancel()
-        
-        # Then terminate all active worker processes
-        terminated_count = 0
-        for worker in self.active_workers:
-            if worker and worker.process and worker.process.poll() is None:
-                print(f"Terminating CHDMAN process: {worker.process.pid}")
+        self.logger.info('Cleaning up CHDMan resources...')
+        with self._workers_lock: 
+            workers_to_process = list(self.active_workers.values())
+            self.active_workers.clear() 
+
+        for worker in workers_to_process:
+            worker.cancel() 
+            if worker.process and worker.process.poll() is None:
+                self.logger.info(f'Terminating PID {worker.process.pid} for worker {worker.worker_id}')
                 try:
-                    # First try to terminate gracefully
                     worker.process.terminate()
-                    
-                    # Give it a moment to terminate gracefully
-                    for i in range(10):  # Increased timeout for graceful termination
-                        if worker.process.poll() is not None:
-                            print(f"Process terminated gracefully after {i/10:.1f} seconds")
-                            terminated_count += 1
-                            break
-                        time.sleep(0.1)
-                    
-                    # If still running, force kill it
-                    if worker.process.poll() is None:
-                        print(f"Force killing CHDMAN process: {worker.process.pid}")
-                        worker.process.kill()
-                        
-                        # Verify the kill worked
-                        for i in range(5):
-                            if worker.process.poll() is not None:
-                                print(f"Process killed after {i/10:.1f} seconds")
-                                terminated_count += 1
-                                break
-                            time.sleep(0.1)
-                        
-                        # If still not terminated, try platform-specific kill
-                        if worker.process.poll() is None:
-                            print("Process still running after kill, trying platform-specific termination")
-                            if os.name == 'nt':  # Windows
-                                try:
-                                    os.system(f"taskkill /F /PID {worker.process.pid}")
-                                except Exception as e:
-                                    print(f"Error with taskkill: {e}")
-                            else:  # Unix-like
-                                try:
-                                    os.system(f"kill -9 {worker.process.pid}")
-                                except Exception as e:
-                                    print(f"Error with kill -9: {e}")
-                except Exception as e:
-                    print(f"Error terminating CHDMAN process: {e}")
+                    time.sleep(0.1); Popen_poll = worker.process.poll()
+                    if Popen_poll is None: time.sleep(0.4); Popen_poll = worker.process.poll()
+                    if Popen_poll is None: worker.process.kill()
+                except Exception as e: self.logger.error(f'Error terminating for {worker.worker_id}: {e}', exc_info=True)
         
-        print(f"Successfully terminated {terminated_count} process{'es' if terminated_count != 1 else ''}")
+        self.logger.info('CHDMan cleanup complete.')
         
-        # Clear the list
-        self.active_workers.clear()
-        print("CHDManager cleanup complete.")
-        
-    def create_cd(self, 
-                  input_file: str, 
-                  output_file: str, 
-                  compression: Optional[str] = None,
-                  hunk_size: Optional[int] = None,
-                  force: bool = False) -> CHDManSignals:
-        """Create a CHD file from a CD image.
-        
-        Args:
-            input_file: Path to the input .cue or .iso file
-            output_file: Path for the output .chd file
-            compression: Compression algorithm(s) to use
-            hunk_size: Size of data hunks in bytes
-            force: Whether to overwrite existing output file
-            
-        Returns:
-            CHDManSignals object for connecting to signals
-            
-        Raises:
-            FileNotFoundError: If input file doesn't exist
-            ValueError: If parameters are invalid
-        """
+    def create_cd(self, input_file: str, output_file: str, compression: Optional[str] = None,
+                  hunk_size: Optional[int] = None, force: bool = False) -> CHDManWorker:
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"Input file not found: {input_file}")
-            
-        # The CHDManWorker will handle parsing and validating the comma-separated 'compression' string
-        # No validation here as it prevents using comma-separated algorithm lists
-            
-        worker = CHDManWorker(
-            executable_path=self.executable_path,
-            command="createcd",
-            input_file=input_file,
-            output_file=output_file,
-            compression=compression,
-            hunk_size=hunk_size,
-            force=force,
-            verbose=self.verbose,
-            worker_id=f"createcd_{id(input_file)}"
+        return self._create_and_start_worker(
+            'createcd', input_file, output_file, compression, 
+            hunk_size, force, os.path.basename(input_file)
         )
         
-        # Track the worker for cleanup
-        self.active_workers[worker.worker_id] = worker
+    def create_dvd(self, input_file: str, output_file: str, compression: Optional[str] = None,
+                   hunk_size: Optional[int] = None, force: bool = False) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        self.logger.info(
+            f'Creating DVD CHD: Input={input_file}, Output={output_file}, Comp={compression}, '
+            f'Hunk={hunk_size}, Force={force}'
+        )
+        return self._create_and_start_worker(
+            'createdvd', input_file, output_file, compression, 
+            hunk_size, force, os.path.basename(input_file)
+        )
         
-        # Connect signals to remove worker from active_workers when done
-        worker.signals.finished.connect(lambda success, msg, w=worker: self._remove_worker(w))
-        worker.signals.error.connect(lambda msg, w=worker: self._remove_worker(w))
+    def create_hd(self, input_file: str, output_file: str, compression: Optional[str] = None,
+                  hunk_size: Optional[int] = None, force: bool = False,
+                  input_size: Optional[int] = None) -> CHDManWorker: 
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'createhd', input_file, output_file, compression, 
+            hunk_size, force, os.path.basename(input_file), inputsize=input_size
+        )
         
-        self.thread_pool.start(worker)
-        return worker
-        
-    def create_dvd(self, 
-                   input_file: str, 
-                   output_file: str, 
-                   compression: Optional[str] = None,
-                   hunk_size: Optional[int] = None,
-                   force: bool = False) -> CHDManSignals:
-        """Create a CHD file from a DVD image.
-        
-        Args:
-            input_file: Path to the input .iso file
-            output_file: Path for the output .chd file
-            compression: Compression algorithm(s) to use
-            hunk_size: Size of data hunks in bytes
-            force: Whether to overwrite existing output file
-            
-        Returns:
-            CHDManSignals object for connecting to signals
-        """
-        # Log the parameters for debugging
-        print(f"""[CHDManager] Creating DVD CHD with:
-  - Input: {input_file}
-  - Output: {output_file}
-  - Compression: {compression}
-  - Hunk Size: {hunk_size}
-  - Force: {force}""")
+    def extract_cd(self, input_file: str, output_file: str, force: bool = False) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'extractcd', input_file, output_file, force=force, 
+            worker_id_suffix=os.path.basename(input_file)
+        )
 
+    def extract_dvd(self, input_file: str, output_file: str, force: bool = False) -> CHDManWorker:
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"Input file not found: {input_file}")
-            
-        # The CHDManWorker will handle parsing and validating the comma-separated 'compression' string
-        # No validation here as it prevents using comma-separated algorithm lists
-            
-        worker = CHDManWorker(
-            executable_path=self.executable_path,
-            command="createdvd",
-            input_file=input_file,
-            output_file=output_file,
-            compression=compression,
-            hunk_size=hunk_size,
-            force=force,
-            verbose=self.verbose,
-            worker_id=f"createdvd_{id(input_file)}"
+        return self._create_and_start_worker(
+            'extractdvd', input_file, output_file, force=force, 
+            worker_id_suffix=os.path.basename(input_file)
         )
-        
-        # Track the worker for cleanup
-        self.active_workers[worker.worker_id] = worker
-        
-        # Connect signals to remove worker from active_workers when done
-        worker.signals.finished.connect(lambda success, msg, w=worker: self._remove_worker(w))
-        worker.signals.error.connect(lambda msg, w=worker: self._remove_worker(w))
-        
-        self.thread_pool.start(worker)
-        return worker
-        
-    def create_hd(self, 
-              input_file: str, 
-              output_file: str, 
-              compression: Optional[str] = None,
-              hunk_size: Optional[int] = None,
-              force: bool = False,
-              input_size: Optional[int] = None) -> CHDManSignals:
-        """Create a CHD file from a hard disk image.
-        
-        Args:
-            input_file: Path to the input raw disk image
-            output_file: Path for the output .chd file
-            compression: Compression algorithm(s) to use
-            hunk_size: Size of data hunks in bytes
-            force: Whether to overwrite existing output file
-            input_size: Size of the input file in bytes (required for some raw images)
-        
-        Returns:
-            CHDManSignals object for connecting to signals
-        """
-        if not os.path.exists(input_file):
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-        # The CHDManWorker will handle parsing and validating the comma-separated 'compression' string
-        # No validation here as it prevents using comma-separated algorithm lists
-        worker = CHDManWorker(
-            executable_path=self.executable_path,
-            command="createhd",
-            input_file=input_file,
-            output_file=output_file,
-            compression=compression,
-            hunk_size=hunk_size,
-            force=force,
-            inputsize=input_size,  # Pass through to worker
-            verbose=self.verbose,
-            worker_id=f"createhd_{id(input_file)}"
-        )
-        # Track the worker for cleanup
-        self.active_workers[worker.worker_id] = worker
-        # Connect signals to remove worker from active_workers when done
-        worker.signals.finished.connect(lambda success, msg, w=worker: self._remove_worker(w))
-        worker.signals.error.connect(lambda msg, w=worker: self._remove_worker(w))
-        self.thread_pool.start(worker)
-        return worker
-        
-    def extract_cd(self, 
-               input_file: str, 
-               output_file: str,
-               force: bool = False) -> CHDManSignals:
-        """Extract a CD image from a CHD file.
-        
-        Args:
-            input_file: Path to the input .chd file
-            output_file: Path for the output .cue file
-            force: Whether to overwrite existing output file
-        
-        Returns:
-            CHDManSignals object for connecting to signals
-        """
-        if not os.path.exists(input_file):
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-        worker = CHDManWorker(
-            executable_path=self.executable_path,
-            command="extractcd",
-            input_file=input_file,
-            output_file=output_file,
-            force=force,
-            worker_id=f"extractcd_{id(input_file)}"
-        )
-        # Track the worker for cleanup
-        self.active_workers[worker.worker_id] = worker
-        # Connect signals to remove worker from active_workers when done
-        worker.signals.finished.connect(lambda success, msg, w=worker: self._remove_worker(w))
-        worker.signals.error.connect(lambda msg, w=worker: self._remove_worker(w))
-        self.thread_pool.start(worker)
-        return worker
-        
-    def extract_raw(self,
-                input_file: str,
-                output_file: str,
-                force: bool = False) -> CHDManSignals:
-        """Extract raw disk image from a CHD file.
-        
-        Args:
-            input_file: Path to the input .chd file
-            output_file: Path for the output raw disk image
-            force: Whether to overwrite existing output file
-        
-        Returns:
-            CHDManSignals object for connecting to signals
-        """
-        if not os.path.exists(input_file):
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-        
-        worker = CHDManWorker(
-            executable_path=self.executable_path,
-            command="extractraw",  # must match the CLI command name
-            input_file=input_file,
-            output_file=output_file,
-            force=force,
-            worker_id=f"extractraw_{id(input_file)}"
-        )
-        # Track the worker for cleanup
-        self.active_workers[worker.worker_id] = worker
-        # Connect signals to remove worker from active_workers when done
-        worker.signals.finished.connect(lambda success, msg, w=worker: self._remove_worker(w))
-        worker.signals.error.connect(lambda msg, w=worker: self._remove_worker(w))
-        self.thread_pool.start(worker)
-        return worker
-        
-    def _remove_worker(self, worker):
-        """Remove a worker from the active_workers dictionary."""
-        self.active_workers.pop(worker.worker_id, None)
-        print(f"[CHDMan] Worker {worker.worker_id} removed from active workers. {len(self.active_workers)} workers remaining.")
 
-    def _parse_info_output(self, output: str) -> Dict[str, Any]:
-        """Parse the output of the 'info' command into a structured format.
-        Args:
-            output: Output string from CHDMAN info command
-        Returns:
-            Dictionary containing parsed CHD information
-        """
+    def extract_hd(self, input_file: str, output_file: str, force: bool = False) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'extracthd', input_file, output_file, force=force, 
+            worker_id_suffix=os.path.basename(input_file)
+        )
+
+    def extract_ld(self, input_file: str, output_file: str, force: bool = False) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'extractld', input_file, output_file, force=force, 
+            worker_id_suffix=os.path.basename(input_file)
+        )
+        
+    def extract_raw(self, input_file: str, output_file: str, force: bool = False) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'extractraw', input_file, output_file, force=force, 
+            worker_id_suffix=os.path.basename(input_file)
+        )
+
+    def info(self, input_file: str) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'info', input_file, worker_id_suffix=os.path.basename(input_file)
+        )
+
+    def verify(self, input_file: str) -> CHDManWorker:
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        return self._create_and_start_worker(
+            'verify', input_file, worker_id_suffix=os.path.basename(input_file)
+        )
+
+    def _remove_worker_by_id(self, worker_id: str):
+        with self._workers_lock: 
+            if worker_id in self.active_workers:
+                del self.active_workers[worker_id]
+                self.logger.info(f'Worker {worker_id} removed. Active: {len(self.active_workers)}')
+            else: self.logger.warning(f'Attempted to remove {worker_id}, not found.')
+
+    def _parse_info_output(self, output: str) -> Dict[str, Any]: 
         info = {}
-        # Extract key-value pairs from the output
         for line in output.splitlines():
             line = line.strip()
-            if not line:
-                continue
-            # Try to split on colon for key-value pairs
+            if not line: continue
             parts = line.split(':', 1)
-            if len(parts) == 2:
-                key = parts[0].strip()
-                value = parts[1].strip()
-                info[key] = value
+            if len(parts) == 2: info[parts[0].strip()] = parts[1].strip()
         return info
 
 
-
 class CHDTaskType(Enum):
-    """Enum for CHD task types.
-    
-    Attributes:
-        COMPRESS: Compress a disk image to CHD format
-        EXTRACT_RAW: Extract raw data from CHD
-        EXTRACT_CD: Extract CD image from CHD
-        EXTRACT_DVD: Extract DVD image from CHD
-        EXTRACT_HD: Extract hard disk image from CHD
-        EXTRACT_AV: Extract audio/video from CHD
-        INFO: Get information about a CHD file
-        VERIFY: Verify CHD integrity
-        DUMP_META: Dump metadata from CHD
-    """
-    COMPRESS = auto()
-    EXTRACT_RAW = auto()
-    EXTRACT_CD = auto()
-    EXTRACT_DVD = auto()
-    EXTRACT_HD = auto()
-    EXTRACT_AV = auto()
-    INFO = auto()
-    VERIFY = auto()
-    DUMP_META = auto()
+    COMPRESS, EXTRACT_RAW, EXTRACT_CD, EXTRACT_DVD, EXTRACT_HD, EXTRACT_AV, INFO, VERIFY, DUMP_META = [auto() for _ in range(9)]
 
-
+@dataclass
 class CHDTask:
-    """Represents a CHD task to be executed.
-    
-    Attributes:
-        task_type: Type of task to execute
-        input_file: Path to input file
-        output_file: Path to output file (if applicable)
-        compression_level: Compression level (none, fast, normal, best)
-        hunk_size: Hunk size in bytes
-        verify: Whether to verify after operation
-        force: Whether to force overwrite of output file
-        media_type: Type of media ("CD", "DVD", or "Hard Disk") (optional)
-        algorithms: Comma-separated list of compression algorithms (optional)
-        user_data: Dictionary of user-defined data associated with the task (optional)
-    """
-    
-    def __init__(
-        self,
-        task_type: CHDTaskType,
-        input_file: str,
-        output_file: Optional[str] = None,
-        compression_level: Optional[str] = None,
-        hunk_size: Optional[int] = None,
-        verify: bool = False,
-        force: bool = False,
-        media_type: Optional[str] = None,
-        algorithms: Optional[str] = None,
-        user_data: Optional[Dict[str, Any]] = None
-    ):
-        """Initialize the CHDTask.
-        
-        Args:
-            task_type: Type of task
-            input_file: Path to the input file
-            output_file: Path to the output file (optional)
-            compression_level: Compression level (optional)
-            hunk_size: Hunk size in bytes (optional)
-            verify: Whether to verify the CHD after operation
-            force: Whether to force the operation
-            media_type: Type of media ("CD", "DVD", or "Hard Disk") (optional)
-            algorithms: Comma-separated list of compression algorithms (optional)
-            user_data: Dictionary of user-defined data to associate with the task (optional)
-        """
-        self.task_type = task_type
-        self.input_file = input_file
-        self.output_file = output_file
-        self.compression_level = compression_level
-        self.hunk_size = hunk_size
-        self.verify = verify
-        self.force = force
-        self.media_type = media_type
-        self.algorithms = algorithms
-        self.user_data = user_data or {}
-
+    task_type: CHDTaskType
+    input_file: str
+    output_file: Optional[str] = None
+    compression_level: Optional[str] = None
+    hunk_size: Optional[int] = None
+    verify: bool = False
+    force: bool = False
+    media_type: Optional[str] = None 
+    algorithms: Optional[str] = None 
+    user_data: Optional[Dict[str, Any]] = None
+    def __post_init__(self):
+        if self.user_data is None: self.user_data = {}
 
 class CHDManager(QObject):
-    """Manager for CHDMAN operations.
-    
-    This class provides a high-level interface for CHDMAN operations.
-    """
-    
-    def __init__(self, executable_path: str = "chdman"):
-        """Initialize the CHDManager.
-        
-        Args:
-            executable_path: Path to CHDMAN executable
-        """
+    signals = CHDManSignals() 
+    def __init__(self, executable_path: str = 'chdman'):
         super().__init__()
-        self.executable_path = executable_path
-        self.chdman = CHDMan(executable_path)
-        self.tasks = []
-        self.current_task = None
-        self.active_workers = {}  # Track active workers by task ID
+        self.executable_path = executable_path 
+        self.chdman = CHDMan(executable_path) 
+        self.tasks: List[CHDTask] = []
+        self.active_workers: Dict[str, CHDManWorker] = {} # This seems unused if CHDMan manages its own workers
         self.thread_pool = QThreadPool()
-        self._last_batch_executed_tasks = []  # Track the last batch of executed tasks
-        self._paused_tasks = set()  # Track paused task IDs
-        self._cancelled_tasks = set()  # Track cancelled task IDs
-        self._task_mutex = QMutex()  # For thread-safe task operations
-        
-        # Initialize signals
-        self.signals = CHDManSignals()
-        
-    def log(self, message):
-        """Log a message.
-        
-        This is a placeholder method that can be overridden by subclasses.
-        By default, it just prints to the console.
-        """
-        print(message)
-        
+        self._task_mutex = QMutex() 
+        self.logger = logging.getLogger(__name__ + '.CHDManager')
+
+    def log(self, message: str): self.logger.info(message)
     def terminate_all_chdman_processes(self):
-        """Find and terminate all CHDMAN processes running on the system.
+        self.logger.info('Delegating terminate all to CHDMan instance')
+        self.chdman.terminate_all_chdman_processes() 
         
-        This is more aggressive than cleanup() as it will terminate ALL CHDMAN processes,
-        not just those started by this instance of the application.
-        """
-        # Simply delegate to the CHDMan instance for process termination
-        print("Delegating CHDMAN process termination to CHDMan instance")
-        self.chdman.terminate_all_chdman_processes()
-            
-    def get_last_executed_tasks_batch(self):
-        """Get the last batch of executed tasks.
-        
-        Returns:
-            List of CHDTask objects that were last executed
-        """
-        return self._last_batch_executed_tasks
-            
+        # This block seems redundant if CHDMan instance handles all worker termination
+        with self._task_mutex: 
+            manager_workers_to_cancel = list(self.active_workers.values())
+        for worker in manager_workers_to_cancel:
+            worker.cancel()
+        self.logger.info('CHDManager also cancelled its own managed active workers if any.')
+
+
     def add_task(self, task: CHDTask) -> None:
-        """Add a task to the queue.
-        
-        Args:
-            task: Task to add
-        """
-        self.tasks.append(task)
-    
+        with QMutexLocker(self._task_mutex): self.tasks.append(task)
+        self.logger.info(f'Task added: {task.input_file} -> {task.task_type.name}')
     def clear_tasks(self):
-        """Clear all tasks from the queue and reset internal state.
+        with QMutexLocker(self._task_mutex): self.tasks.clear()
+        self.logger.info('All tasks cleared.')
         
-        This ensures a clean slate when processing multiple files,
-        especially when handling archives with multiple disk images.
-        """
-        # Clear the task queue
-        self.tasks.clear()
+    def execute_all_tasks(self) -> List[CHDManWorker]:
+        workers_started: List[CHDManWorker] = []
+        with QMutexLocker(self._task_mutex):
+            if not self.tasks: self.logger.info('No tasks to execute.'); return []
+            tasks_to_run = list(self.tasks) 
+            self.tasks.clear() 
+
+        self.logger.info(f'Executing {len(tasks_to_run)} tasks.')
+        for task in tasks_to_run:
+            try:
+                # Removed redundant CHDMAN path finding logic
+                if not task.input_file or not os.path.exists(task.input_file):
+                    raise CHDManInputFileError(f'Manager check: Input file not found: {task.input_file}')
+                if task.output_file:
+                    output_dir = os.path.dirname(task.output_file)
+                    if output_dir and not os.path.exists(output_dir):
+                        try: os.makedirs(output_dir, exist_ok=True)
+                        except Exception as e: raise CHDManOutputFileError(
+                            f'Manager check: Cannot create output dir: {output_dir}. {e}'
+                        )
+                
+                worker = self._delegate_task_to_chdman(task)
+                if worker: 
+                    workers_started.append(worker)
+            except CHDManError as e:
+                self.logger.error(f'Error preparing or delegating task {task.input_file}: {e}', exc_info=True)
+                self.signals.error.emit(f'Error for task {task.input_file}: {e}') 
+            except Exception as e:
+                self.logger.error(f'Unexpected error preparing or delegating task {task.input_file}: {e}', exc_info=True)
+                self.signals.error.emit(f'Unexpected error for task {task.input_file}: {e}')
+        return workers_started
+
+    def _delegate_task_to_chdman(self, task: CHDTask) -> Optional[CHDManWorker]:
+        self.logger.debug(f'Delegating task to CHDMan: {task.task_type.name} - {task.input_file}')
+        worker: Optional[CHDManWorker] = None
         
-        # Clear the last batch of executed tasks
-        self._last_batch_executed_tasks.clear()
-        
-        # Reset task counter (used for generating task IDs)
-        self._task_counter = 0
-        
-    def execute_all_tasks(self):
-        """Execute all tasks in the queue sequentially.
-        
-        Returns:
-            List of CHDManSignals objects for each task
-            
-        Raises:
-            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
-            CHDManInputFileError: If an input file is invalid or not found
-            CHDManOutputFileError: If an output file cannot be created or written to
-            CHDManCommandError: If a CHDMAN command fails
-        """
-        # Clear any existing active workers before starting new tasks
-        self.active_workers = {}
-        print("CHDManager: execute_all_tasks called")
-        if not self.tasks:
-            print("CHDManager: No tasks in queue")
-            self._last_batch_executed_tasks = []  # Clear the last batch if there are no tasks
-            return []
-        
-        # Find CHDMAN executable
-        try:
-            chdman_path = self.find_chdman()
-            print(f"Found CHDMAN at: {chdman_path}")
-        except Exception as e:
-            print(f"Error finding CHDMAN: {e}")
-            raise
-        
-        # Validate tasks
-        for task in self.tasks:
-            if not task.input_file or not os.path.exists(task.input_file):
-                raise CHDManInputFileError(f"Input file not found: {task.input_file}")
-            
-            if not task.output_file:
-                raise CHDManOutputFileError("Output file not specified")
-            
-            output_dir = os.path.dirname(task.output_file)
-            if output_dir and not os.path.exists(output_dir):
-                try:
-                    os.makedirs(output_dir, exist_ok=True)
-                except Exception as e:
-                    raise CHDManOutputFileError(f"Cannot create output directory: {output_dir}. Error: {e}")
-        
-        # Store the current batch of tasks to be executed
-        self._last_batch_executed_tasks = list(self.tasks)  # Make a copy
-        
-        # Execute tasks
-        signals_list = []
-        for task in self._last_batch_executed_tasks:  # Iterate the copied list
-            self.current_task = task  # Still useful for single-task context if needed
-            signals = self.execute_task(task)
-            signals_list.append(signals)
-        
-        return signals_list
-    
-    def _create_worker_for_task(self, task: CHDTask):
-        """Create a worker for the given task.
-        
-        Args:
-            task: The task to create a worker for
-            
-        Returns:
-            CHDManWorker instance configured for the task
-        """
         if task.task_type == CHDTaskType.COMPRESS:
-            if task.media_type == "CD":
-                return self.chdman.create_cd(
-                    task.input_file,
-                    task.output_file,
-                    compression=task.algorithms,
-                    hunk_size=task.hunk_size,
-                    force=task.force
-                )
-            elif task.media_type == "DVD":
-                return self.chdman.create_dvd(
-                    task.input_file,
-                    task.output_file,
-                    compression=task.algorithms,
-                    hunk_size=task.hunk_size,
-                    force=task.force
-                )
-            else:  # HD
-                return self.chdman.create_hd(
-                    task.input_file,
-                    task.output_file,
-                    compression=task.algorithms,
-                    hunk_size=task.hunk_size,
-                    force=task.force
-                )
+            command_name_map = {'CD': 'createcd', 'DVD': 'createdvd', 'HD': 'createhd'}
+            command_name = command_name_map.get(task.media_type or '', '')
+            if not command_name: self.logger.error(f'Unsupported media: {task.media_type}'); return None
+            if not task.output_file: self.logger.error(f'No output file for compress: {task.input_file}'); return None
+            
+            task_kwargs = {'input_size': task.user_data.get('input_size') if task.user_data else None} if command_name == 'createhd' else {}
+
+            worker_method = getattr(self.chdman, command_name, None)
+            if worker_method:
+                 worker = worker_method(
+                     task.input_file, task.output_file, task.algorithms, 
+                     task.hunk_size, task.force, **task_kwargs
+                 )
+            else: # Should not happen if command_name is from map and map matches CHDMan methods
+                self.logger.error(f"CHDMan has no method '{command_name}'")
+                return None
+        
         elif task.task_type == CHDTaskType.EXTRACT_CD:
-            return self.chdman.extract_cd(
-                task.input_file,
-                task.output_file,
-                force=task.force
-            )
+            if not task.output_file: self.logger.error(f'No output for extract_cd: {task.input_file}'); return None
+            worker = self.chdman.extract_cd(task.input_file, task.output_file, task.force)
         elif task.task_type == CHDTaskType.EXTRACT_DVD:
-            return self.chdman.extract_dvd(
-                task.input_file,
-                task.output_file,
-                force=task.force
-            )
+            if not task.output_file: self.logger.error(f'No output for extract_dvd: {task.input_file}'); return None
+            worker = self.chdman.extract_dvd(task.input_file, task.output_file, task.force)
         elif task.task_type == CHDTaskType.EXTRACT_HD:
-            return self.chdman.extract_hd(
-                task.input_file,
-                task.output_file,
-                force=task.force
-            )
+            if not task.output_file: self.logger.error(f'No output for extract_hd: {task.input_file}'); return None
+            worker = self.chdman.extract_hd(task.input_file, task.output_file, task.force)
+        elif task.task_type == CHDTaskType.EXTRACT_RAW:
+            if not task.output_file: self.logger.error(f'No output for extract_raw: {task.input_file}'); return None
+            worker = self.chdman.extract_raw(task.input_file, task.output_file, task.force)
+        elif task.task_type == CHDTaskType.INFO:
+            worker = self.chdman.info(task.input_file)
         elif task.task_type == CHDTaskType.VERIFY:
-            return self.chdman.verify(task.input_file)
-        else:
-            raise ValueError(f"Unsupported task type: {task.task_type}")
-            
-    def execute_task(self, task: CHDTask) -> CHDManSignals:
-        """Execute a single task.
-        
-        Args:
-            task: Task to execute
-            
-        Returns:
-            CHDManSignals object for connecting to signals
-            
-        Raises:
-            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
-            CHDManInputFileError: If an input file is invalid or not found
-            CHDManOutputFileError: If an output file cannot be created or written to
-            CHDManCommandError: If a CHDMAN command fails
-        """
-        with QMutexLocker(self._task_mutex):
-            if task in self._cancelled_tasks:
-                self._cancelled_tasks.remove(task)
-                raise CHDManCommandError("Task was cancelled", 1, "Task was cancelled before execution")
-            # Deduplication: prevent duplicate workers for the same task
-            import logging
-            logger = logging.getLogger(__name__)
-            if id(task) in self.active_workers:
-                logger.warning(f"Duplicate worker launch prevented for task: {getattr(task, 'input_file', None)} -> {getattr(task, 'output_file', None)}")
-                return self.active_workers[id(task)].signals
+            worker = self.chdman.verify(task.input_file)
+        else: self.logger.error(f'Unsupported task type for delegation: {task.task_type.name}'); return None
 
-        # Create and configure worker based on task type
-        worker = self._create_worker_for_task(task)
-        
-        # Store the worker
-        with QMutexLocker(self._task_mutex):
-            self.active_workers[id(task)] = worker
-            
-        # Connect signals
-        worker.signals.finished.connect(lambda success, msg: self._on_task_finished(task, success, msg))
-        worker.signals.error.connect(lambda msg: self._on_task_error(task, msg))
-        
-        # Start the worker
-        self.thread_pool.start(worker)
-        
-        return worker.signals
+        if worker:
+            worker.signals.finished.connect(lambda s, m, t=task, w_id=worker.worker_id: self._on_delegated_worker_finished(t, s, m, w_id))
+            worker.signals.error.connect(lambda e, t=task, w_id=worker.worker_id: self._on_delegated_worker_error(t, e, w_id))
+            self.logger.info(f'Delegated and started worker {worker.worker_id} via CHDMan for {task.input_file}')
+        return worker
 
-    def _on_task_finished(self, task: CHDTask, success: bool, message: str):
-        """Handle task completion.
-        
-        Args:
-            task: The completed task
-            success: Whether the task completed successfully
-            message: Completion message
-        """
-        with QMutexLocker(self._task_mutex):
-            self._cleanup_task(task)
-            
-    def _on_task_error(self, task: CHDTask, error: str):
-        """Handle task errors.
-        
-        Args:
-            task: The failed task
-            error: Error message
-        """
-        with QMutexLocker(self._task_mutex):
-            self._cleanup_task(task)
-            
-    def _cleanup_task(self, task: CHDTask):
-        """Clean up resources for a completed task.
-        
-        Args:
-            task: The task to clean up
-        """
-        if id(task) in self.active_workers:
-            del self.active_workers[id(task)]
-        if task in self._paused_tasks:
-            self._paused_tasks.remove(task)
-        if task in self._cancelled_tasks:
-            self._cancelled_tasks.remove(task)
+    def _on_delegated_worker_finished(self, task: CHDTask, success: bool, message: str, worker_id: str):
+        self.logger.info(f'Delegated worker {worker_id} for task {task.input_file} finished. Success: {success}. Msg: {message}')
+        self.signals.task_completed.emit(task.input_file, success, message)
+
+    def _on_delegated_worker_error(self, task: CHDTask, error_message: str, worker_id: str):
+        self.logger.error(f'Delegated worker {worker_id} for task {task.input_file} error: {error_message}')
+        self.signals.task_completed.emit(task.input_file, False, error_message)
                     
-    def find_chdman(self) -> str:
-        """Find CHDMAN executable in bin directory or PATH.
-        
-        Returns:
-            Path to CHDMAN executable
-            
-        Raises:
-            CHDManExecutableNotFoundError: If CHDMAN executable cannot be found
-        """
-        # First, check in the bin directory
-        bin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
-        print(f"Looking for CHDMAN in bin directory: {bin_dir}")
-        
-        if os.name == "nt":
-            chdman_path = os.path.join(bin_dir, "chdman.exe")
-        else:
-            chdman_path = os.path.join(bin_dir, "chdman")
-        
-        print(f"Checking for CHDMAN at: {chdman_path}")
-        print(f"File exists: {os.path.exists(chdman_path)}")
-        
-        if os.path.exists(chdman_path):
-            if os.name == "nt":
-                # On Windows, we can't easily check execute permissions
-                print(f"Found CHDMAN at: {chdman_path}")
-                return chdman_path
-            else:
-                # On Unix-like systems, check execute permissions
-                has_exec = os.access(chdman_path, os.X_OK)
-                print(f"Has execute permission: {has_exec}")
-                if has_exec:
-                    return chdman_path
-            
-        # If not found in bin directory, check PATH
-        try:
-            # Try to run 'chdman' with --help to check if it's in PATH
-            result = subprocess.run(["chdman", "--help"], capture_output=True, text=True, check=False)
-            if result.returncode == 0 or "CHDMAN" in result.stdout:
-                return "chdman"  # Return just the command name if found in PATH
-        except FileNotFoundError:
-            # Not in PATH, continue with search
-            pass
-            
-        # Check common installation directories
-        common_dirs = []
-        if os.name == "nt":
-            # Windows common directories
-            program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
-            program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
-            common_dirs = [
-                os.path.join(program_files, "MAME"),
-                os.path.join(program_files_x86, "MAME"),
-                "C:\\MAME"
-            ]
-        else:
-            # Linux/macOS common directories
-            common_dirs = [
-                "/usr/local/bin",
-                "/usr/bin",
-                "/opt/mame",
-                os.path.expanduser("~/mame")
-            ]
-            
-        for directory in common_dirs:
-            if os.name == "nt":
-                check_path = os.path.join(directory, "chdman.exe")
-            else:
-                check_path = os.path.join(directory, "chdman")
-                
-            if os.path.exists(check_path) and os.access(check_path, os.X_OK):
-                return check_path
-                
-        # If we get here, CHDMAN was not found
-        raise CHDManExecutableNotFoundError(
-            "CHDMAN executable not found. Please install CHDMAN and place it in the bin directory, "
-            "or ensure it's in your system PATH."
-        )
+    def find_chdman(self) -> str: return self.chdman.executable_path 
+    def get_chdman_version(self, executable_path: Optional[str]=None) -> Optional[str]:
+        return self.chdman.get_chdman_version(executable_path or self.chdman.executable_path)
+    def get_active_tasks_count(self) -> int: return len(self.chdman.active_workers) 
     
-    def get_chdman_version(self, executable_path: str) -> Optional[str]:
-        """Get the CHDMAN version.
-        
-        Args:
-            executable_path: Path to CHDMAN executable
-            
-        Returns:
-            CHDMAN version string or None if not found
-        """
-        try:
-            # Run CHDMAN to get version
-            result = subprocess.run(
-                [executable_path, "--help"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-            )
-            
-            if result.returncode == 0:
-                # Parse version from output
-                output = result.stdout
-                match = re.search(r"CHDMAN\s+([\d.]+)", output)
-                if match:
-                    return match.group(1)
-        except Exception:
-            pass
-        
-        return None
-        
-    def get_active_tasks_count(self):
-        """Get the number of active tasks.
-        
-        Returns:
-            Number of active tasks currently being processed
-        """
-        # Count the active workers in the CHDMan instance
-        active_count = len(self.chdman.active_workers)
-        print(f"[CHDManager] Active workers count: {active_count}")
-        return active_count
-    
-    def pause_task(self, task: CHDTask) -> bool:
-        """Pause a running task.
-        
-        Args:
-            task: The task to pause
-            
-        Returns:
-            bool: True if the task was paused, False otherwise
-        """
-        with QMutexLocker(self._task_mutex):
-            if id(task) not in self.active_workers:
-                return False
-                
-            # Mark task as paused
-            self._paused_tasks.add(task)
-            
-            # Get the worker and pause it
-            worker = self.active_workers[id(task)]
-            if hasattr(worker, 'pause'):
-                worker.pause()
-                return True
-                
-        return False
-        
-    def resume_task(self, task: CHDTask) -> bool:
-        """Resume a paused task.
-        
-        Args:
-            task: The task to resume
-            
-        Returns:
-            bool: True if the task was resumed, False otherwise
-        """
-        with QMutexLocker(self._task_mutex):
-            if task not in self._paused_tasks:
-                return False
-                
-            # Remove from paused set
-            self._paused_tasks.remove(task)
-            
-            # Get the worker and resume it
-            if id(task) in self.active_workers:
-                worker = self.active_workers[id(task)]
-                if hasattr(worker, 'resume'):
-                    worker.resume()
-                    return True
-                    
-        return False
-        
-    def cancel_task(self, task: CHDTask) -> bool:
-        """Cancel a running or queued task.
-        
-        Args:
-            task: The task to cancel
-            
-        Returns:
-            bool: True if the task was cancelled, False otherwise
-        """
-        with QMutexLocker(self._task_mutex):
-            # Mark task as cancelled
-            self._cancelled_tasks.add(task)
-            
-            # If task is active, terminate it
-            if id(task) in self.active_workers:
-                worker = self.active_workers[id(task)]
-                if hasattr(worker, 'terminate'):
-                    worker.terminate()
-                    self._cleanup_task(task)
-                    return True
-                    
-        return False
-        
-    def get_task_status(self, task: CHDTask) -> str:
-        """Get the status of a task.
-        
-        Args:
-            task: The task to check
-            
-        Returns:
-            str: Task status ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')
-        """
-        with QMutexLocker(self._task_mutex):
-            if task in self._cancelled_tasks:
-                return 'cancelled'
-            elif task in self._paused_tasks:
-                return 'paused'
-            elif id(task) in self.active_workers:
-                return 'running'
-            elif task in self.tasks:
-                return 'pending'
-            else:
-                return 'completed'  # Assuming if it's not in any other state and not in tasks
-                
     def cleanup(self):
-        """Terminate all running CHDMAN processes started by this instance.
-        
-        This should be called when the application is closing to ensure
-        all CHDMAN processes are properly terminated.
-        """
-        with QMutexLocker(self._task_mutex):
-            # Cancel all active tasks
-            for task_id in list(self.active_workers.keys()):
-                task = next((t for t in self.tasks if id(t) == task_id), None)
-                if task:
-                    self.cancel_task(task)
-                    
-            # Clear all task lists
+        self.logger.info('CHDManager cleanup initiated. Delegating to CHDMan instance.')
+        self.chdman.cleanup() 
+        with QMutexLocker(self._task_mutex): 
             self.tasks.clear()
-            self.active_workers.clear()
-            self._paused_tasks.clear()
-            self._cancelled_tasks.clear()
-            
-        # Clean up CHDMAN
-        self.chdman.cleanup()
-        
-        # Clear the task queue
-        self.tasks.clear()
-        self.current_task = None
-        self.log("CHDManager task queue cleared.")
+        self.logger.info('CHDManager cleanup finished.')
 
-# --- Singleton accessor for CHDManager ---
 _chd_manager_singleton = None
+_singleton_lock = threading.Lock() 
 
 def get_chd_manager():
-    """Return the singleton CHDManager instance initialized with the correct path."""
     global _chd_manager_singleton
-    if _chd_manager_singleton is None:
-        chdman_path = load_chdman_path()
-        if not chdman_path:
-            chdman_path = "chdman"
-        _chd_manager_singleton = CHDManager(executable_path=chdman_path)
+    if _chd_manager_singleton is None: 
+        with _singleton_lock:
+            if _chd_manager_singleton is None: 
+                chdman_path = load_chdman_path()
+                if not chdman_path: 
+                    chdman_path = 'chdman'
+                
+                if not logging.getLogger().hasHandlers():
+                    logging.basicConfig(
+                        level=logging.INFO, 
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                    )
+                _chd_manager_singleton = CHDManager(executable_path=chdman_path)
     return _chd_manager_singleton
+
+[end of core/chdman.py]
