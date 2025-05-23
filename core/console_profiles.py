@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Console-specific compression profiles for RetroClamp.
@@ -8,15 +7,24 @@ This module defines optimized compression profiles for various gaming consoles,
 based on their specific media types and emulator recommendations.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from .compression_profiles import CompressionProfile
 
 
 class ConsoleProfile(CompressionProfile):
     """Console-specific compression profile."""
 
-    def __init__(self, name: str, description: str, algorithms: str, hunk_size: int,
-                 console: str, emulators: list, command: str):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        algorithms: str,
+        hunk_size: int,
+        console: str,
+        emulators: List[str],
+        command: str,
+    ):
         """Initialize a console-specific compression profile.
 
         Args:
@@ -28,7 +36,7 @@ class ConsoleProfile(CompressionProfile):
             emulators: List of compatible emulators
             command: CHDMAN command to use (createcd, createdvd, etc.)
         """
-        super().__init__(name, description, algorithms, hunk_size)
+        super().__init__(name, description, algorithms, hunk_size)  # type: ignore
         self.console = console
         self.emulators = emulators
         self.command = command
@@ -39,13 +47,15 @@ class ConsoleProfile(CompressionProfile):
         Returns:
             Dictionary with profile information
         """
-        info = super().get_info()
-        info.update({
-            'console': self.console,
-            'emulators': self.emulators,
-            'command': self.command
-        })
-        return info
+        return {
+            "name": self.name,
+            "description": self.description,
+            "algorithms": self.algorithms,
+            "hunk_size": self.hunk_size,
+            "console": self.console,
+            "emulators": self.emulators,
+            "command": self.command,
+        }
 
 
 class ConsoleProfileManager:
@@ -64,153 +74,155 @@ class ConsoleProfileManager:
         profiles = {}
 
         # CD-based consoles (SEGA CD, PS1, TurboGrafx-CD, Saturn)
-        cd_consoles = {
-            'sega_cd': {
-                'name': 'SEGA CD / Mega CD',
-                'emulators': ['RetroArch', 'MAME', 'Kega Fusion'],
+        cd_consoles: Dict[str, Dict[str, Any]] = {
+            "sega_cd": {
+                "name": "SEGA CD / Mega CD",
+                "emulators": ["RetroArch", "MAME", "Kega Fusion"],
             },
-            'ps1': {
-                'name': 'PlayStation 1',
-                'emulators': ['RetroArch', 'DuckStation', 'Mednafen'],
+            "ps1": {
+                "name": "PlayStation 1",
+                "emulators": ["RetroArch", "DuckStation", "Mednafen"],
             },
-            'tg_cd': {
-                'name': 'TurboGrafx-CD / PC Engine CD',
-                'emulators': ['RetroArch', 'Mednafen', 'MAME'],
+            "tg_cd": {
+                "name": "TurboGrafx-CD / PC Engine CD",
+                "emulators": ["RetroArch", "Mednafen", "MAME"],
             },
-            'saturn': {
-                'name': 'SEGA Saturn',
-                'emulators': ['RetroArch', 'Mednafen', 'MAME'],
+            "saturn": {
+                "name": "SEGA Saturn",
+                "emulators": ["RetroArch", "Mednafen", "MAME"],
             },
         }
 
         # Create profiles for CD-based consoles
         for console_id, console_info in cd_consoles.items():
             profiles[console_id] = {
-                'optimal': ConsoleProfile(
+                "optimal": ConsoleProfile(
                     name=f"{console_info['name']} - Optimal",
                     description=f"Best compression for {console_info['name']} games",
                     algorithms="cdlz,cdzl,cdfl",
                     hunk_size=18816,  # 8 CD sectors (standard for these consoles)
-                    console=console_info['name'],
-                    emulators=console_info['emulators'],
-                    command="createcd"
+                    console=console_info["name"],
+                    emulators=console_info["emulators"],
+                    command="createcd",
                 ),
-                'balanced': ConsoleProfile(
+                "balanced": ConsoleProfile(
                     name=f"{console_info['name']} - Balanced",
                     description=f"Good balance for {console_info['name']} games",
                     algorithms="cdlz,cdzl",
                     hunk_size=18816,  # 8 CD sectors
-                    console=console_info['name'],
-                    emulators=console_info['emulators'],
-                    command="createcd"
+                    console=console_info["name"],
+                    emulators=console_info["emulators"],
+                    command="createcd",
                 ),
-                'fast': ConsoleProfile(
+                "fast": ConsoleProfile(
                     name=f"{console_info['name']} - Fast",
                     description=f"Fastest compression for {console_info['name']} games",
                     algorithms="cdlz",
                     hunk_size=18816,  # 8 CD sectors
-                    console=console_info['name'],
-                    emulators=console_info['emulators'],
-                    command="createcd"
-                )
+                    console=console_info["name"],
+                    emulators=console_info["emulators"],
+                    command="createcd",
+                ),
             }
 
         # Dreamcast (uses GDI files)
-        profiles['dreamcast'] = {
-            'optimal': ConsoleProfile(
+        profiles["dreamcast"] = {
+            "optimal": ConsoleProfile(
                 name="Dreamcast - Optimal",
                 description="Best compression for Dreamcast games",
                 algorithms="cdlz,cdzl,cdfl",
                 hunk_size=18816,  # 8 CD sectors
                 console="SEGA Dreamcast",
                 emulators=["RetroArch", "Redream", "Flycast"],
-                command="createcd"
+                command="createcd",
             ),
-            'balanced': ConsoleProfile(
+            "balanced": ConsoleProfile(
                 name="Dreamcast - Balanced",
                 description="Good balance for Dreamcast games",
                 algorithms="cdlz,cdzl",
                 hunk_size=18816,  # 8 CD sectors
                 console="SEGA Dreamcast",
                 emulators=["RetroArch", "Redream", "Flycast"],
-                command="createcd"
+                command="createcd",
             ),
-            'fast': ConsoleProfile(
+            "fast": ConsoleProfile(
                 name="Dreamcast - Fast",
                 description="Fastest compression for Dreamcast games",
                 algorithms="cdlz",
                 hunk_size=18816,  # 8 CD sectors
                 console="SEGA Dreamcast",
                 emulators=["RetroArch", "Redream", "Flycast"],
-                command="createcd"
-            )
+                command="createcd",
+            ),
         }
 
         # PlayStation 2 (DVD-based)
-        profiles['ps2'] = {
-            'optimal': ConsoleProfile(
+        profiles["ps2"] = {
+            "optimal": ConsoleProfile(
                 name="PlayStation 2 - Optimal",
                 description="Best compression for PS2 games",
                 algorithms="lzma",
                 hunk_size=4096,  # 2 DVD sectors
                 console="PlayStation 2",
                 emulators=["PCSX2", "RetroArch"],
-                command="createdvd"
+                command="createdvd",
             ),
-            'balanced': ConsoleProfile(
+            "balanced": ConsoleProfile(
                 name="PlayStation 2 - Balanced",
                 description="Good balance for PS2 games",
                 algorithms="zlib,huff",
                 hunk_size=4096,  # 2 DVD sectors
                 console="PlayStation 2",
                 emulators=["PCSX2", "RetroArch"],
-                command="createdvd"
+                command="createdvd",
             ),
-            'fast': ConsoleProfile(
+            "fast": ConsoleProfile(
                 name="PlayStation 2 - Fast",
                 description="Fastest compression for PS2 games",
                 algorithms="zlib",
                 hunk_size=4096,  # 2 DVD sectors
                 console="PlayStation 2",
                 emulators=["PCSX2", "RetroArch"],
-                command="createdvd"
-            )
+                command="createdvd",
+            ),
         }
 
         # PlayStation Portable (PSP)
-        profiles['psp'] = {
-            'optimal': ConsoleProfile(
+        profiles["psp"] = {
+            "optimal": ConsoleProfile(
                 name="PSP - Optimal",
                 description="Best compression for PSP games (recommended for PPSSPP)",
                 algorithms="lzma",
                 hunk_size=2048,  # Recommended for PPSSPP
                 console="PlayStation Portable",
                 emulators=["PPSSPP", "RetroArch"],
-                command="createdvd"
+                command="createdvd",
             ),
-            'balanced': ConsoleProfile(
+            "balanced": ConsoleProfile(
                 name="PSP - Balanced",
                 description="Good balance for PSP games",
                 algorithms="zlib,huff",
                 hunk_size=2048,  # Recommended for PPSSPP
                 console="PlayStation Portable",
                 emulators=["PPSSPP", "RetroArch"],
-                command="createdvd"
+                command="createdvd",
             ),
-            'fast': ConsoleProfile(
+            "fast": ConsoleProfile(
                 name="PSP - Fast",
                 description="Fastest compression for PSP games",
                 algorithms="zlib",
                 hunk_size=2048,  # Recommended for PPSSPP
                 console="PlayStation Portable",
                 emulators=["PPSSPP", "RetroArch"],
-                command="createdvd"
-            )
+                command="createdvd",
+            ),
         }
 
         return profiles
 
-    def get_profile(self, console: str, profile_type: str = 'balanced') -> Optional[ConsoleProfile]:
+    def get_profile(
+        self, console: str, profile_type: str = "balanced"
+    ) -> Optional[ConsoleProfile]:
         """Get a profile for a specific console.
 
         Args:
@@ -221,7 +233,9 @@ class ConsoleProfileManager:
             ConsoleProfile or None if not found
         """
         if console in self.profiles and profile_type in self.profiles[console]:
-            return self.profiles[console][profile_type]
+            profile = self.profiles[console][profile_type]
+            if isinstance(profile, ConsoleProfile):
+                return profile
         return None
 
     def get_consoles(self) -> list:
@@ -244,7 +258,8 @@ class ConsoleProfileManager:
         if console_id in self.profiles:
             # Get the name from any profile (they all have the same console name)
             profile = next(iter(self.profiles[console_id].values()))
-            return profile.console
+            if isinstance(profile, ConsoleProfile):
+                return profile.console
         return ""
 
     def get_profile_types(self, console: str) -> list:

@@ -39,6 +39,9 @@ logs/
 .cursor/
 *.suo
 *.ntvs*
+
+# --- Local Utility Scripts ---
+find_invalid_escape.py
 *.njsproj
 *.sln
 *.sw?

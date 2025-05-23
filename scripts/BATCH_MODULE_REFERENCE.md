@@ -166,11 +166,11 @@ graph TD
 ```python
 class BatchTab(QWidget):
     """Main batch processing interface for RetroClamp.
-    
+
     Provides a user interface for managing batch processing tasks, including
     file management, progress tracking, and process control.
     """
-    
+
     # Signals
     processing_started = pyqtSignal()
     processing_paused = pyqtSignal()
@@ -179,10 +179,10 @@ class BatchTab(QWidget):
     progress_updated = pyqtSignal(int, str)  # progress_percent, status
     file_completed = pyqtSignal(str, str)    # file_path, status
     error_occurred = pyqtSignal(str)         # error_message
-    
+
     def __init__(self, parent=None):
         """Initialize the BatchTab with default settings.
-        
+
         Args:
             parent: Parent widget (optional)
         """
@@ -195,10 +195,10 @@ class BatchTab(QWidget):
         self.worker = None
         self.checkpoint_manager = CheckpointManager()
         self._setup_ui()
-    
+
     def add_files(self, file_paths: List[str], output_dir: str = None) -> None:
         """Add files to the processing queue.
-        
+
         Args:
             file_paths: List of file paths to add
             output_dir: Output directory for processed files (optional)
@@ -208,18 +208,18 @@ class BatchTab(QWidget):
                 self.files.append(file_path)
                 self.output_dirs[file_path] = output_dir or os.path.dirname(file_path)
         self._update_file_list()
-    
+
     def start_processing(self) -> None:
         """Start or resume batch processing."""
         if not self.files:
             self.error_occurred.emit("No files to process")
             return
-            
+
         if not self.is_processing:
             self.is_processing = True
             self.processing_started.emit()
             self._process_next_file()
-    
+
     def pause_processing(self) -> None:
         """Pause the current processing."""
         if self.is_processing and not self.is_paused:
@@ -227,7 +227,7 @@ class BatchTab(QWidget):
             if self.worker:
                 self.worker.pause()
             self.processing_paused.emit()
-    
+
     def resume_processing(self) -> None:
         """Resume paused processing."""
         if self.is_processing and self.is_paused:
@@ -235,17 +235,17 @@ class BatchTab(QWidget):
             if self.worker:
                 self.worker.resume()
             self.processing_resumed.emit()
-    
+
     def abort_processing(self) -> None:
         """Stop processing and clear the queue."""
         if self.worker:
             self.worker.stop()
         self._cleanup()
         self.processing_stopped.emit()
-    
+
     def save_state(self) -> bool:
         """Save current processing state to a checkpoint.
-        
+
         Returns:
             bool: True if save was successful
         """
@@ -257,10 +257,10 @@ class BatchTab(QWidget):
             'is_paused': self.is_paused
         }
         return self.checkpoint_manager.save_checkpoint(state)
-    
+
     def load_state(self) -> bool:
         """Load processing state from the latest checkpoint.
-        
+
         Returns:
             bool: True if load was successful
         """
@@ -272,33 +272,33 @@ class BatchTab(QWidget):
             self._update_file_list()
             return True
         return False
-    
+
     def _process_next_file(self) -> None:
         """Process the next file in the queue."""
         if self.current_file_index >= len(self.files):
             self._processing_complete()
             return
-            
+
         current_file = self.files[self.current_file_index]
         output_dir = self.output_dirs.get(current_file, os.path.dirname(current_file))
-        
+
         self.worker = BatchWorker(
             file_path=current_file,
             output_dir=output_dir,
             operation='compress',  # or get from UI
             row=self.current_file_index
         )
-        
+
         self.worker.progress.connect(self._on_worker_progress)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.error.connect(self._on_worker_error)
-        
+
         self.worker.start()
-    
+
     def _on_worker_progress(self, progress: int, message: str) -> None:
         """Handle progress updates from worker."""
         self.progress_updated.emit(progress, message)
-    
+
     def _on_worker_finished(self) -> None:
         """Handle worker completion."""
         self.file_completed.emit(
@@ -307,18 +307,18 @@ class BatchTab(QWidget):
         )
         self.current_file_index += 1
         self._process_next_file()
-    
+
     def _on_worker_error(self, error: str) -> None:
         """Handle worker errors."""
         self.error_occurred.emit(error)
         self.current_file_index += 1
         self._process_next_file()
-    
+
     def _processing_complete(self) -> None:
         """Clean up after all processing is done."""
         self._cleanup()
         self.processing_stopped.emit()
-    
+
     def _cleanup(self) -> None:
         """Clean up resources."""
         self.is_processing = False
@@ -326,12 +326,12 @@ class BatchTab(QWidget):
         if self.worker:
             self.worker.deleteLater()
             self.worker = None
-    
+
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         # UI setup code would go here
         pass
-    
+
     def _update_file_list(self) -> None:
         """Update the UI file list display."""
         # UI update code would go here
@@ -389,7 +389,7 @@ batch_tab.start_processing()
 ```python
 class BatchWorker(QThread):
     """Background worker for processing files with CHDMAN.
-    
+
     Handles file processing in a separate thread to maintain UI responsiveness.
     Supports both compression and extraction operations with progress tracking.
     """
@@ -398,10 +398,10 @@ class BatchWorker(QThread):
     error = pyqtSignal(str, str)         # error_message, file_path
     finished = pyqtSignal()               # Emitted when processing completes successfully
     file_completed = pyqtSignal(str, str) # file_path, status_message
-    
+
     def __init__(self, file_path: str, output_dir: str, operation: str, row: int):
         """Initialize the BatchWorker.
-        
+
         Args:
             file_path: Path to the file to process
             output_dir: Output directory for processed files
@@ -414,33 +414,33 @@ class BatchWorker(QThread):
         self.operation = operation
         self.row = row
         self._is_running = True
-    
+
     def run(self) -> None:
         """Main processing loop.
-        
+
         Handles the actual file processing in a separate thread.
         Emits progress updates and handles errors.
         """
         try:
             # Processing logic here
             self.progress.emit(0, f"Starting {self.operation}...")
-            
+
             # Example processing steps:
             # 1. Validate input
             # 2. Set up output paths
             # 3. Execute CHDMAN command
             # 4. Handle results
-            
+
             self.progress.emit(100, f"Completed {self.operation}")
             self.file_completed.emit(self.file_path, f"{self.operation.capitalize()}ed successfully")
             self.finished.emit()
-            
+
         except Exception as e:
             self.error.emit(str(e), self.file_path)
-    
+
     def stop(self) -> None:
         """Stop processing gracefully.
-        
+
         Sets a flag that will be checked during processing
         to allow for clean termination.
         """
@@ -486,88 +486,88 @@ worker.stop()
 ```python
 class CheckpointManager:
     """Manages saving and loading of batch processing checkpoints.
-    
+
     Handles serialization of the processing state to disk and provides
     methods to restore the state, allowing for process resumption.
     """
-    
+
     def __init__(self, checkpoint_dir: str = None):
         """Initialize with optional custom checkpoint directory.
-        
+
         Args:
-            checkpoint_dir: Directory to store checkpoint files. 
+            checkpoint_dir: Directory to store checkpoint files.
                           Defaults to user's app data directory.
         """
         self.checkpoint_dir = checkpoint_dir or self._get_default_checkpoint_dir()
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-    
+
     def save_checkpoint(self, state: dict, checkpoint_name: str = "latest") -> bool:
         """Save current processing state to a checkpoint file.
-        
+
         Args:
             state: Dictionary containing processing state
             checkpoint_name: Name for the checkpoint (default: 'latest')
-            
+
         Returns:
             bool: True if save was successful, False otherwise
         """
         try:
             checkpoint_path = os.path.join(
-                self.checkpoint_dir, 
+                self.checkpoint_dir,
                 f"{checkpoint_name}.json"
             )
-            
+
             # Add metadata
             state['_metadata'] = {
                 'version': '1.0',
                 'timestamp': datetime.datetime.utcnow().isoformat(),
                 'checkpoint_name': checkpoint_name
             }
-            
+
             # Save to file atomically
             temp_path = f"{checkpoint_path}.tmp"
             with open(temp_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2)
-                
+
             # On Windows, we need to remove the destination first if it exists
             if os.path.exists(checkpoint_path):
                 os.remove(checkpoint_path)
-                
+
             os.rename(temp_path, checkpoint_path)
             return True
-            
+
         except Exception as e:
             logging.error(f"Failed to save checkpoint: {e}")
             return False
-    
+
     def load_checkpoint(self, checkpoint_name: str = "latest") -> Optional[dict]:
         """Load saved processing state from a checkpoint file.
-        
+
         Args:
             checkpoint_name: Name of the checkpoint to load (default: 'latest')
-            
+
         Returns:
             dict: The saved state, or None if loading failed
         """
         try:
             checkpoint_path = os.path.join(
-                self.checkpoint_dir, 
+                self.checkpoint_dir,
                 f"{checkpoint_name}.json"
             )
-            
+
             if not os.path.exists(checkpoint_path):
                 return None
-                
+
             with open(checkpoint_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-                
+
         except Exception as e:
             logging.error(f"Failed to load checkpoint: {e}")
             return None
-    
+
     def list_checkpoints(self) -> List[Dict[str, Any]]:
         """List all available checkpoints with their metadata.
-        
+
         Returns:
             List of dictionaries containing checkpoint metadata
         """
@@ -582,7 +582,7 @@ class CheckpointManager:
                 except:
                     continue
         return checkpoints
-    
+
     def _get_default_checkpoint_dir(self) -> str:
         """Get the default directory for storing checkpoints."""
         app_name = "RetroClamp"
@@ -657,7 +657,7 @@ for checkpoint in checkpoint_manager.list_checkpoints():
 - `load_checkpoint(checkpoint_name)`: Load saved state
 - `list_checkpoints()`: List all available checkpoints
 - `_get_default_checkpoint_dir()`: Get platform-specific default directory
-    
+
     def clear_checkpoint(self) -> bool:
         """Remove checkpoint file."""
         pass

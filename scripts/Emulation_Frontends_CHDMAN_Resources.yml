@@ -4,15 +4,15 @@ frontends:
   - name: "RetroBat"
     website: "https://www.retrobat.org"
     platform: ["Windows 8.1/10/11 (64-bit)"]
-    description: "Windows-based emulation package using an EmulationStation frontend with RetroArch and standalone emulators pre-configured. Aims to be plug-and-play for running ROM collections with minimal setup:contentReference[oaicite:0]{index=0}:contentReference[oaicite:1]{index=1}."
+    description: "Windows-based emulation package using an EmulationStation frontend with RetroArch and standalone emulators pre-configured. Aims to be plug-and-play for running ROM collections with minimal setup."
     features:
-      - "Integrated EmulationStation UI (custom build) with theme downloads and animations support:contentReference[oaicite:2]{index=2}"
-      - "Built-in scraper for box art, marquees, manuals, etc:contentReference[oaicite:3]{index=3}"
-      - "150+ system profiles pre-configured (just add your own ROMs):contentReference[oaicite:4]{index=4}"
-      - "Content Downloader for emulators, themes, homebrews, bezels within the interface:contentReference[oaicite:5]{index=5}"
-      - "Unified settings menu for global/per-system/per-game emulator options:contentReference[oaicite:6]{index=6}"
-      - "Portable install; can run from USB drive:contentReference[oaicite:7]{index=7}"
-    documentation: "Official Wiki (setup and usage):contentReference[oaicite:8]{index=8}"
+      - "Integrated EmulationStation UI (custom build) with theme downloads and animations support"
+      - "Built-in scraper for box art, marquees, manuals, etc"
+      - "150+ system profiles pre-configured (just add your own ROMs)"
+      - "Content Downloader for emulators, themes, homebrews, bezels within the interface"
+      - "Unified settings menu for global/per-system/per-game emulator options"
+      - "Portable install; can run from USB drive"
+    documentation: "Official Wiki (setup and usage)"
     install_method: "Installer (EXE) or portable archive (ZIP)"
     main_executable: "RetroBat.exe (launches EmulationStation frontend)"
     config_file_location: "RetroBat\\emulationstation\\.emulationstation folder (portable, within RetroBat directory)"
@@ -29,7 +29,7 @@ frontends:
       living_room_UI: true
       handhelds: false
       automation_ready: false
-    license: "GPLv3 (code):contentReference[oaicite:9]{index=9}"
+    license: "GPLv3 (code)"
     source_code: "https://github.com/RetroBat-Official/RetroBat"
     last_stable_release: "2025-03-31"
     latest_version: "7.1.0"
@@ -37,15 +37,15 @@ frontends:
   - name: "Batocera.linux"
     website: "https://batocera.org"
     platform: ["Linux (Standalone OS)"]
-    description: "Open-source retro-gaming operating system distribution that turns a PC, Raspberry Pi, or other board into a console-like emulation system:contentReference[oaicite:10]{index=10}. Boots directly into an EmulationStation-based frontend with 200+ system support:contentReference[oaicite:11]{index=11}."
+    description: "Open-source retro-gaming operating system distribution that turns a PC, Raspberry Pi, or other board into a console-like emulation system. Boots directly into an EmulationStation-based frontend with 200+ system support."
     features:
-      - "Full Linux distro with over 200 systems emulated out-of-the-box:contentReference[oaicite:12]{index=12}"
+      - "Full Linux distro with over 200 systems emulated out-of-the-box"
       - "Themeable EmulationStation UI with many community themes available"
-      - "Shaders, bezels, rewinding, netplay, RetroAchievements support:contentReference[oaicite:13]{index=13}"
-      - "Plug-and-play controller support (most gamepads auto-configure):contentReference[oaicite:14]{index=14}"
+      - "Shaders, bezels, rewinding, netplay, RetroAchievements support"
+      - "Plug-and-play controller support (most gamepads auto-configure)"
       - "Network features: shareable network drive for ROMs, retro achievements"
       - "Regular updates with new emulators and features (uses Batocera Updater)"
-    documentation: "Official Wiki (setup, customization):contentReference[oaicite:15]{index=15}"
+    documentation: "Official Wiki (setup, customization)"
     install_method: "Flashable OS image (download for various hardware)"
     main_executable: "EmulationStation (auto-starts on boot)"
     config_file_location: "/userdata/system/batocera.conf (for system settings), per-emulator configs under /userdata"
@@ -55,14 +55,14 @@ frontends:
     theme_support:
       format: "EmulationStation themes (XML + assets)"
       custom_animations: false
-      third_party_theme_sites: ["Official Batocera theme repository:contentReference[oaicite:16]{index=16}", "Batocera forums"]
+      third_party_theme_sites: ["Official Batocera theme repository", "Batocera forums"]
     tags: ["Linux", "OS Distribution", "RetroPie alternative", "open-source"]
     best_for:
       arcade_cabinets: true
       living_room_UI: true
       handhelds: true
       automation_ready: false
-    license: "GPLv3 (open-source components):contentReference[oaicite:17]{index=17}"
+    license: "GPLv3 (open-source components)"
     source_code: "https://github.com/batocera-linux/batocera.linux"
     last_stable_release: "2025-01-09"
     latest_version: "41"
@@ -70,7 +70,7 @@ frontends:
   - name: "LaunchBox / Big Box"
     website: "https://www.launchbox-app.com"
     platform: ["Windows", "Android"]
-    description: "Popular games frontend and library manager for Windows (and Android). Organizes emulators and PC games with metadata and box art. On Windows it includes Big Box, a TV-friendly fullscreen interface (premium feature):contentReference[oaicite:18]{index=18}."
+    description: "Popular games frontend and library manager for Windows (and Android). Organizes emulators and PC games with metadata and box art. On Windows it includes Big Box, a TV-friendly fullscreen interface (premium feature)."
     features:
       - "ROM import and metadata scraping from an online games database"
       - "Supports both emulators and native PC games in one library"
@@ -79,7 +79,7 @@ frontends:
       - "Auto-download game media (covers, fanart, videos) from LaunchBox DB"
       - "Filter and playlist features (genre, platform, custom playlists)"
     documentation: "Forums and YouTube tutorials (official user guides)"
-    install_method: "Installer (Windows EXE); APK (Android) via website (not on Play Store):contentReference[oaicite:19]{index=19}"
+    install_method: "Installer (Windows EXE); APK (Android) via website (not on Play Store)"
     main_executable: "LaunchBox.exe (Desktop UI), BigBox.exe (Fullscreen UI)"
     config_file_location: "LaunchBox\\Data\\ (XML configuration files and game database)"
     supports_cli_launch: true
@@ -103,15 +103,15 @@ frontends:
   - name: "RetroArch"
     website: "https://www.retroarch.com"
     platform: ["Windows", "Linux", "macOS", "Android", "iOS", "others"]
-    description: "Cross-platform, all-in-one emulator frontend (libretro API reference implementation). Runs emulator cores with a unified interface and feature set:contentReference[oaicite:20]{index=20}. Provides advanced features like shaders, netplay, runahead, achievements, and more."
+    description: "Cross-platform, all-in-one emulator frontend (libretro API reference implementation). Runs emulator cores with a unified interface and feature set. Provides advanced features like shaders, netplay, runahead, achievements, and more."
     features:
       - "Unified settings and controller configuration for all systems"
-      - "Supports ~100+ libretro cores (multi-system emulation):contentReference[oaicite:21]{index=21}"
+      - "Supports ~100+ libretro cores (multi-system emulation)"
       - "Advanced features: shaders (video filters), netplay, save states, rewind"
       - "RetroAchievements integration and runahead latency reduction"
       - "Built-in menu drivers (XMB, Ozone, GLUI, etc.) for different UI styles"
       - "Extensive CLI and scripting capabilities for automation and launch"
-    documentation: "Libretro Docs (official manual and core documentation):contentReference[oaicite:22]{index=22}"
+    documentation: "Libretro Docs (official manual and core documentation)"
     install_method: "Package installer or portable (Windows); package manager or Flatpak (Linux); sideload APK (Android); Steam"
     main_executable: "retroarch.exe / retroarch (binary name varies by OS)"
     config_file_location: "retroarch.cfg (in installation folder or user directory); additional configs in RetroArch/config/ per core/game"
@@ -128,7 +128,7 @@ frontends:
       living_room_UI: true
       handhelds: true
       automation_ready: true
-    license: "GPLv3:contentReference[oaicite:23]{index=23}"
+    license: "GPLv3"
     source_code: "https://github.com/libretro/RetroArch"
     last_stable_release: "2025-01-05"
     latest_version: "1.20.0"
@@ -143,13 +143,13 @@ frontends:
       - "Minimal built-in options (favoring manual config via files or RetroPie scripts)"
       - "Collection management (favorites, custom collections) and metadata scraping"
       - "Hotkey support for common actions (quit, restart, shutdown via gamepad)"
-      - "Extensible via scripts triggered on events (game launch, exit, etc.):contentReference[oaicite:24]{index=24}:contentReference[oaicite:25]{index=25}"
+      - "Extensible via scripts triggered on events (game launch, exit, etc.)"
     documentation: "RetroPie Docs (for original ES) and ES-DE User Guide"
     install_method: "Source build or bundled in RetroPie/Batocera; ES-DE provides installers for Win/Linux"
     main_executable: "emulationstation.exe / emulationstation (binary depending on OS)"
     config_file_location: "~/.emulationstation/ (Linux/ES-DE); on Windows, config in %APPDATA%\\EmulationStation or portable in program folder"
     supports_cli_launch: true
-    launch_parameters: ["--windowed (run in a window)", "--resolution <w> <h>", "--no-exit (disable Exit option):contentReference[oaicite:26]{index=26}", "--no-splash"]
+    launch_parameters: ["--windowed (run in a window)", "--resolution <w> <h>", "--no-exit (disable Exit option)", "--no-splash"]
     supported_formats: ["User-defined per system (set in es_systems.cfg); common defaults include zip, 7z, nes, smc, bin, cue, iso, gdi, chd"]
     theme_support:
       format: "XML theme files (per system/game view with images, layout, styles)"
@@ -161,7 +161,7 @@ frontends:
       living_room_UI: moderate
       handhelds: true
       automation_ready: true
-    license: "MIT:contentReference[oaicite:27]{index=27}"
+    license: "MIT"
     source_code: "https://github.com/RetroPie/EmulationStation (RetroPie fork); ES-DE on GitLab"
     last_stable_release: "2025-04-04"
     latest_version: "3.2.0"
@@ -169,16 +169,16 @@ frontends:
   - name: "Pegasus Frontend"
     website: "https://pegasus-frontend.org"
     platform: ["Windows", "Linux", "macOS", "Raspberry Pi", "Android"]
-    description: "Modern, highly customizable game launcher frontend. Uses Qt/QML for theming, allowing completely custom user interfaces with animations and even 3D. Designed for performance and cross-platform support (runs on desktops and embedded devices):contentReference[oaicite:28]{index=28}:contentReference[oaicite:29]{index=29}."
+    description: "Modern, highly customizable game launcher frontend. Uses Qt/QML for theming, allowing completely custom user interfaces with animations and even 3D. Designed for performance and cross-platform support (runs on desktops and embedded devices)."
     features:
-      - "Advanced theme engine using QML: design your own UI screens, menus, and effects:contentReference[oaicite:30]{index=30}"
-      - "Compatible with EmulationStation gamelist metadata and RetroArch playlists:contentReference[oaicite:31]{index=31}"
-      - "Supports Steam library integration and detection of installed games:contentReference[oaicite:32]{index=32}"
-      - "Runs on a wide range of devices (from PCs to Raspberry Pi and Odroid):contentReference[oaicite:33]{index=33}"
+      - "Advanced theme engine using QML: design your own UI screens, menus, and effects"
+      - "Compatible with EmulationStation gamelist metadata and RetroArch playlists"
+      - "Supports Steam library integration and detection of installed games"
+      - "Runs on a wide range of devices (from PCs to Raspberry Pi and Odroid)"
       - "Open source and community-driven with frequent development builds"
       - "Metadata and asset support: displays cover art, videos, game info, etc."
     documentation: "Official Docs and GitHub Wiki"
-    install_method: "Portable (extract and run); also available via Scoop (Windows):contentReference[oaicite:34]{index=34} and Flatpak (Linux):contentReference[oaicite:35]{index=35}"
+    install_method: "Portable (extract and run); also available via Scoop (Windows) and Flatpak (Linux)"
     main_executable: "pegasus-fe.exe / pegasus-fe (depending on OS)"
     config_file_location: "~/.config/pegasus-frontend/settings.txt (Linux/macOS); Pegasus/config/ on Windows portable"
     supports_cli_launch: false
@@ -202,15 +202,15 @@ frontends:
   - name: "Simple Launcher"
     website: "https://www.purelogiccode.com/simplelauncherpage"
     platform: ["Windows"]
-    description: "Lightweight open-source emulator frontend for Windows (WPF-based). It emphasizes ease of use with an “Easy Mode” for beginners (auto-downloads popular emulators and sets up folders) and an “Expert Mode” for advanced customization of systems and emulators:contentReference[oaicite:36]{index=36}:contentReference[oaicite:37]{index=37}."
+    description: "Lightweight open-source emulator frontend for Windows (WPF-based). It emphasizes ease of use with an \"Easy Mode\" for beginners (auto-downloads popular emulators and sets up folders) and an \"Expert Mode\" for advanced customization of systems and emulators."
     features:
-      - "Game library with cover art, search function, and favorites support:contentReference[oaicite:38]{index=38}:contentReference[oaicite:39]{index=39}"
-      - "Easy Mode: automatically installs default emulators for each platform and creates ROMs & covers folders:contentReference[oaicite:40]{index=40}"
-      - "Expert Mode: manual configuration of systems, multiple emulators per system, custom command-line parameters:contentReference[oaicite:41]{index=41}:contentReference[oaicite:42]{index=42}"
-      - "Built-in downloader for emulator installation (for emulators not requiring BIOS):contentReference[oaicite:43]{index=43}"
-      - "Context menu with links to game manuals, online videos, etc., for selected game:contentReference[oaicite:44]{index=44}"
+      - "Game library with cover art, search function, and favorites support"
+      - "Easy Mode: automatically installs default emulators for each platform and creates ROMs & covers folders"
+      - "Expert Mode: manual configuration of systems, multiple emulators per system, custom command-line parameters"
+      - "Built-in downloader for emulator installation (for emulators not requiring BIOS)"
+      - "Context menu with links to game manuals, online videos, etc., for selected game"
       - "Portable application (no installer; configuration is stored with the app)"
-    documentation: "GitHub README and Wiki:contentReference[oaicite:45]{index=45}:contentReference[oaicite:46]{index=46}"
+    documentation: "GitHub README and Wiki"
     install_method: "Download ZIP from GitHub Releases; extract and run"
     main_executable: "Simple Launcher.exe"
     config_file_location: "Config and data stored in Simple Launcher's folder (portable) – games database in Data subfolder"
@@ -218,16 +218,16 @@ frontends:
     launch_parameters: []
     supported_formats: ["Any ROM format supported by chosen emulators (user defines for each system)"]
     theme_support:
-      format: "Built-in theming (UI supports custom wallpapers, video backgrounds, music):contentReference[oaicite:47]{index=47}"
+      format: "Built-in theming (UI supports custom wallpapers, video backgrounds, music)"
       custom_animations: false
-      third_party_theme_sites: ["Official forum’s Themes section:contentReference[oaicite:48]{index=48}"]
+      third_party_theme_sites: ["Official forum's Themes section"]
     tags: ["Windows", "WPF", "open-source", "easy-setup", "library-manager"]
     best_for:
       arcade_cabinets: false
       living_room_UI: false
       handhelds: false
       automation_ready: false
-    license: "GPLv3:contentReference[oaicite:49]{index=49}"
+    license: "GPLv3"
     source_code: "https://github.com/drpetersonfernandes/SimpleLauncher"
     last_stable_release: "2024-12-15"
     latest_version: "1.3.0"
@@ -235,18 +235,18 @@ frontends:
   - name: "Attract Mode"
     website: "https://attractmode.org"
     platform: ["Windows", "Linux", "macOS", "Raspberry Pi"]
-    description: "Highly customizable arcade frontend known for its scriptable themes (“layouts”). Intended for arcade cabinets and HTPCs, it features a menu wheel and grid layouts with smooth animations. Attract-Mode acts as a launcher for command-line emulators (like MAME, RetroArch) and hides the underlying OS for a seamless arcade experience:contentReference[oaicite:50]{index=50}."
+    description: "Highly customizable arcade frontend known for its scriptable themes (\"layouts\"). Intended for arcade cabinets and HTPCs, it features a menu wheel and grid layouts with smooth animations. Attract-Mode acts as a launcher for command-line emulators (like MAME, RetroArch) and hides the underlying OS for a seamless arcade experience."
     features:
       - "Layout-based theming with Squirrel scripting (create dynamic, animated arcade frontends)"
       - "Multiple display modes: wheel, text list, grid, etc., with customizable transitions"
-      - "Filter rules for game lists (e.g., show only 2-player games, or genre filters):contentReference[oaicite:51]{index=51}:contentReference[oaicite:52]{index=52}"
-      - "Artwork and video preview support (marquees, snaps, flyers, wheel images, videos):contentReference[oaicite:53]{index=53}:contentReference[oaicite:54]{index=54}"
+      - "Filter rules for game lists (e.g., show only 2-player games, or genre filters)"
+      - "Artwork and video preview support (marquees, snaps, flyers, wheel images, videos)"
       - "Plugin system and extensions for added functionality (e.g., LED blinky support, event hooks)"
       - "Lightweight and fast, suitable for low-power hardware like Raspberry Pi"
-    documentation: "Official Documentation (included in download, man page):contentReference[oaicite:55]{index=55} and community wiki"
-    install_method: "Download portable zip (precompiled binaries for Win/Linux); available via package managers (AUR, PPA):contentReference[oaicite:56]{index=56}"
+    documentation: "Official Documentation (included in download, man page) and community wiki"
+    install_method: "Download portable zip (precompiled binaries for Win/Linux); available via package managers (AUR, PPA)"
     main_executable: "attract.exe / attract (depending on OS)"
-    config_file_location: "~/.attract/attract.cfg (Linux); attract\\attract.cfg in program folder (Windows portable):contentReference[oaicite:57]{index=57}"
+    config_file_location: "~/.attract/attract.cfg (Linux); attract\\attract.cfg in program folder (Windows portable)"
     supports_cli_launch: true
     launch_parameters: ["-c <config_dir> (specify config folder)", "--loglevel <0-3>", "--screen <index>"]
     supported_formats: ["Any launch command can be configured. Commonly used for MAME (arcade ROMs), and any file types emulators accept (no inherent format restriction)"]
@@ -260,7 +260,7 @@ frontends:
       living_room_UI: true
       handhelds: false
       automation_ready: moderate
-    license: "GPLv3:contentReference[oaicite:58]{index=58}"
+    license: "GPLv3"
     source_code: "https://github.com/mickelson/attract"
     last_stable_release: "2023-06-11"
     latest_version: "2.7.0"
@@ -268,18 +268,18 @@ frontends:
   - name: "RetroFE"
     website: "http://retrofe.nl"
     platform: ["Windows", "Linux"]
-    description: "Open-source frontend designed as a free alternative to HyperSpin:contentReference[oaicite:59]{index=59}. Focuses on simplicity and flexibility for arcade cabinets and gaming centers. RetroFE uses a menu and wheel system and supports many of HyperSpin’s style elements (wheel art, themes) without the need for Flash."
+    description: "Open-source frontend designed as a free alternative to HyperSpin. Focuses on simplicity and flexibility for arcade cabinets and gaming centers. RetroFE uses a menu and wheel system and supports many of HyperSpin's style elements (wheel art, themes) without the need for Flash."
     features:
       - "Supports Hyperspin-style wheel menus and multi-level menus (Arcade-like UI)"
       - "Lightweight and fast interface suitable for low-spec PCs or cabinets"
       - "Highly customizable via plaintext config files (systems, menu structure, etc.)"
-      - "Portable design; all configuration in its folder or a definable RETROFE_PATH:contentReference[oaicite:60]{index=60}"
+      - "Portable design; all configuration in its folder or a definable RETROFE_PATH"
       - "Theme support with static and animated artwork (no coding needed, uses artwork packs and layout config)"
       - "Active community forum with shared themes and setup tips"
     documentation: "Emulation General Wiki and RetroFE forums"
     install_method: "Download from site (portable zip) for Windows; compile from source for Linux (or community packages)"
     main_executable: "retrofe.exe / retrofe (CLI launches GUI)"
-    config_file_location: "RetroFE/config/ (all configs, collections, and artwork paths are relative to install unless $RETROFE_PATH is set:contentReference[oaicite:61]{index=61})"
+    config_file_location: "RetroFE/config/ (all configs, collections, and artwork paths are relative to install unless $RETROFE_PATH is set)"
     supports_cli_launch: false
     launch_parameters: []
     supported_formats: ["Any emulator/ROM can be integrated; supports listing any file types defined in config (commonly zip, iso, cue, etc.)"]
@@ -293,7 +293,7 @@ frontends:
       living_room_UI: true
       handhelds: false
       automation_ready: limited
-    license: "GPLv3:contentReference[oaicite:62]{index=62}"
+    license: "GPLv3"
     source_code: "https://github.com/phulshof/RetroFE"
     last_stable_release: "N/A (rolling releases)"
     latest_version: "N/A"
@@ -314,7 +314,7 @@ frontends:
     main_executable: "Playnite.DesktopApp.exe (desktop mode), Playnite.FullscreenApp.exe (big screen mode)"
     config_file_location: "%APPDATA%\\Playnite\\ (for installed version, contains config.json and library DB); or Playnite\\Portable\\Config\\ for portable"
     supports_cli_launch: true
-    launch_parameters: ["--start <gameId> (launches a game by ID):contentReference[oaicite:63]{index=63}", "--fullscreen (start in fullscreen mode)", "--hidesplash"]
+    launch_parameters: ["--start <gameId> (launches a game by ID)", "--fullscreen (start in fullscreen mode)", "--hidesplash"]
     supported_formats: ["Any game/ROM format – no restrictions (uses emulator configurations to launch appropriate files, e.g., cue, iso, rom, etc.)"]
     theme_support:
       format: "XAML themes for Desktop and Fullscreen modes"
@@ -329,20 +329,20 @@ frontends:
     license: "MIT"
     source_code: "https://github.com/JosefNemec/Playnite"
     last_stable_release: "2025-04-04"
-    latest_version: "10.19"  # Example version, Playnite 10.x is current as of 2025
+    latest_version: "10.19"
 
   - name: "Ludo"
     website: "https://ludo.libretro.com"
     platform: ["Windows", "Linux", "macOS", "Raspberry Pi"]
-    description: "Minimalist libretro frontend written in Go. Provides a simple interface to launch games using libretro cores, with an emphasis on easy configuration and default settings. Ludo aims to require no complex setup – it auto-detects games and chooses appropriate cores, making it straightforward for users who want a RetroArch alternative with fewer options:contentReference[oaicite:64]{index=64}."
+    description: "Minimalist libretro frontend written in Go. Provides a simple interface to launch games using libretro cores, with an emphasis on easy configuration and default settings. Ludo aims to require no complex setup – it auto-detects games and chooses appropriate cores, making it straightforward for users who want a RetroArch alternative with fewer options."
     features:
       - "Automatic core selection and configuration (minimal user setup needed)"
       - "UI is simple and game-focused – browse by platform, pick game, play"
       - "No advanced settings exposed (sensible defaults to reduce complexity)"
-      - "Supports the same libretro cores as RetroArch (except ones requiring OpenGL ES on platforms where not available):contentReference[oaicite:65]{index=65}"
+      - "Supports the same libretro cores as RetroArch (except ones requiring OpenGL ES on platforms where not available)"
       - "Allows on-the-fly core downloads/updating similar to RetroArch"
       - "Save states, screenshots, and basic shader support included"
-    documentation: "Libretro Docs (Ludo guide):contentReference[oaicite:66]{index=66}:contentReference[oaicite:67]{index=67}"
+    documentation: "Libretro Docs (Ludo guide)"
     install_method: "Download from libretro (ZIP binaries); available on some package managers; itch.io for some platforms"
     main_executable: "ludo.exe / ludo"
     config_file_location: "~/.config/Ludo/ (Linux); %APPDATA%\\Ludo\\ (Windows) – contains ludo.db for metadata and settings"
@@ -367,13 +367,13 @@ frontends:
   - name: "DIG (Android)"
     website: "https://digdroid.com"
     platform: ["Android"]
-    description: "Popular Android frontend that automatically scans your device for ROMs, downloads cover art, and organizes games by system:contentReference[oaicite:68]{index=68}:contentReference[oaicite:69]{index=69}. DIG provides a simple, touch-friendly UI with multiple view styles and easy integration with installed emulators (launches games via your chosen emulator apps)."
+    description: "Popular Android frontend that automatically scans your device for ROMs, downloads cover art, and organizes games by system. DIG provides a simple, touch-friendly UI with multiple view styles and easy integration with installed emulators (launches games via your chosen emulator apps)."
     features:
-      - "Automatic ROM discovery and emulator assignment on first launch:contentReference[oaicite:70]{index=70}"
+      - "Automatic ROM discovery and emulator assignment on first launch"
       - "Downloads box art and game metadata from online sources"
-      - "Six different game browsing view types (grid, list, wheel, etc.):contentReference[oaicite:71]{index=71}"
-      - "Customizable themes: users can apply background images, videos, and even music to themes:contentReference[oaicite:72]{index=72}"
-      - "Voice search functionality for games:contentReference[oaicite:73]{index=73}"
+      - "Six different game browsing view types (grid, list, wheel, etc.)"
+      - "Customizable themes: users can apply background images, videos, and even music to themes"
+      - "Voice search functionality for games"
       - "Android home screen shortcuts for directly launching games"
     documentation: "Official Forum FAQ and community guides"
     install_method: "Google Play Store (free) or direct APK; in-app purchase available (to support dev, remove ads)"
@@ -385,7 +385,7 @@ frontends:
     theme_support:
       format: "User-created themes (mix of image/video/audio assets configured via the app)"
       custom_animations: false
-      third_party_theme_sites: ["Official DIG forums (themes category):contentReference[oaicite:74]{index=74}"]
+      third_party_theme_sites: ["Official DIG forums (themes category)"]
     tags: ["Android", "mobile", "auto-scan", "covers", "touch-friendly"]
     best_for:
       arcade_cabinets: false
@@ -400,16 +400,16 @@ frontends:
   - name: "Steam ROM Manager (SRM)"
     website: "https://github.com/SteamGridDB/steam-rom-manager"
     platform: ["Windows", "Linux"]
-    description: "Tool to bulk-import ROMs and emulators into Steam as non-Steam games, with auto-generated artwork. Primarily used for integrating retro games into Steam (especially on Steam Deck and Big Picture mode). It parses directories of ROMs, applies naming rules, and pulls artwork from SteamGridDB to create polished entries in your Steam library:contentReference[oaicite:75]{index=75}:contentReference[oaicite:76]{index=76}."
+    description: "Tool to bulk-import ROMs and emulators into Steam as non-Steam games, with auto-generated artwork. Primarily used for integrating retro games into Steam (especially on Steam Deck and Big Picture mode). It parses directories of ROMs, applies naming rules, and pulls artwork from SteamGridDB to create polished entries in your Steam library."
     features:
       - "Flexible parser system for ROMs – supports custom folder structures and file name patterns"
       - "Automatic downloading of game artwork (covers, heroes, logos) from SteamGridDB"
-      - "Can add controller configuration templates for each added game:contentReference[oaicite:77]{index=77}"
+      - "Can add controller configuration templates for each added game"
       - "Preview mode to show how entries will look in Steam before applying"
       - "Supports managing entries for individual emulators or multiple emulators at once"
       - "Command-line and GUI usage for integration with scripts (used by EmuDeck on Steam Deck)"
-    documentation: "GitHub README (usage instructions):contentReference[oaicite:78]{index=78}"
-    install_method: "Portable (download zip from GitHub Releases for Win/Linux); also on Flathub (Flatpak):contentReference[oaicite:79]{index=79}"
+    documentation: "GitHub README (usage instructions)"
+    install_method: "Portable (download zip from GitHub Releases for Win/Linux); also on Flathub (Flatpak)"
     main_executable: "Steam-ROM-Manager.exe (Windows); AppImage or binary on Linux"
     config_file_location: "Per-user configuration stored in JSON files alongside the executable or in user profile (e.g., %APPDATA%/steam-rom-manager/)"
     supports_cli_launch: true
@@ -432,31 +432,31 @@ frontends:
 
 CHDMAN:
   documentation:
-    - "Official MAME CHD Utility Documentation:contentReference[oaicite:80]{index=80}"
+    - "Official MAME CHD Utility Documentation"
   tutorials:
     written:
-      - "Recalbox Wiki – Using CHDMAN (includes scripts for Linux/Mac):contentReference[oaicite:81]{index=81}"
-      - "i12bretro Blog – Converting BIN/CUE to CHD (PS1 example):contentReference[oaicite:82]{index=82}"
+      - "Recalbox Wiki – Using CHDMAN (includes scripts for Linux/Mac)"
+      - "i12bretro Blog – Converting BIN/CUE to CHD (PS1 example)"
     community:
-      - "OnionOS Advanced Guide – CHD conversion (Windows batch):contentReference[oaicite:83]{index=83}"
-      - "Reddit Guide – Using CHDMan for ISO to CHD (discussion):contentReference[oaicite:84]{index=84}"
+      - "OnionOS Advanced Guide – CHD conversion (Windows batch)"
+      - "Reddit Guide – Using CHDMan for ISO to CHD (discussion)"
     video:
-      - "Retro Game Corps – CHD Conversion Tutorial (YouTube):contentReference[oaicite:85]{index=85}"
-      - "Batocera Nation – Batch Convert BIN/CUE to CHD (YouTube):contentReference[oaicite:86]{index=86}"
+      - "Retro Game Corps – CHD Conversion Tutorial (YouTube)"
+      - "Batocera Nation – Batch Convert BIN/CUE to CHD (YouTube)"
 
 notes: "This MTE document provides structured metadata on popular emulation frontends (launchers) and the CHDMAN tool for compressing disc images. It is intended to assist in configuring emulation setups, automating frontend tasks, and guiding format conversions."
 
 ai_reference_context:
-  purpose: "To enable AI systems to recommend, configure, or troubleshoot emulation setups. For example, an AI assistant can use this data to choose an appropriate frontend for a user’s needs or generate scripts (like batch CHD conversions) with correct parameters."
+  purpose: "To enable AI systems to recommend, configure, or troubleshoot emulation setups. For example, an AI assistant can use this data to choose an appropriate frontend for a user's needs or generate scripts (like batch CHD conversions) with correct parameters."
   example_tasks:
     - "Recommend the best frontend for an arcade cabinet build and outline its setup steps"
-    - "Automatically generate a command-line to convert a set of .cue/.bin PlayStation games to .chd using CHDMAN:contentReference[oaicite:87]{index=87}"
+    - "Automatically generate a command-line to convert a set of .cue/.bin PlayStation games to .chd using CHDMAN"
     - "Configure EmulationStation on Windows with custom theme and scraped metadata for a given ROM collection"
     - "Use Steam ROM Manager data to add a new emulator (e.g., Dolphin for GameCube) with all games and artwork to Steam"
   data_sources:
-    - "Official documentation and wikis for each frontend (e.g., RetroBat Wiki:contentReference[oaicite:88]{index=88}, Batocera Wiki) and CHDMAN docs:contentReference[oaicite:89]{index=89}"
-    - "Community forums, tutorials, and guides (e.g., RetroPie/EmuDeck forums, YouTube setup videos:contentReference[oaicite:90]{index=90}, blog posts:contentReference[oaicite:91]{index=91})"
-    - "Source code repositories and changelogs for version and feature verification (GitHub releases, etc.):contentReference[oaicite:92]{index=92}:contentReference[oaicite:93]{index=93}"
+    - "Official documentation and wikis for each frontend (e.g., RetroBat Wiki, Batocera Wiki) and CHDMAN docs"
+    - "Community forums, tutorials, and guides (e.g., RetroPie/EmuDeck forums, YouTube setup videos, blog posts)"
+    - "Source code repositories and changelogs for version and feature verification (GitHub releases, etc.)"
 
 test_cases:
   - frontend: "Steam ROM Manager"
@@ -465,4 +465,3 @@ test_cases:
   - frontend: "EmulationStation (ES-DE)"
     input_rom: "Pokémon Red.gb (Game Boy ROM)"
     expected_behavior: "Game appears in EmulationStation under the Game Boy system with the title and artwork (after scraping), and launches via the configured emulator when selected."
-```

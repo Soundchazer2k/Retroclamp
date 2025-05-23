@@ -3,19 +3,19 @@
   <g fill="white">
     <!-- Top Right Square -->
     <rect x="18" y="2" width="4" height="4" rx="1" />
-    
+
     <!-- Middle Right Square -->
     <rect x="18" y="8" width="4" height="4" rx="1" />
-    
+
     <!-- Middle Center Square -->
     <rect x="12" y="8" width="4" height="4" rx="1" />
-    
+
     <!-- Bottom Right Square -->
     <rect x="18" y="14" width="4" height="4" rx="1" />
-    
+
     <!-- Bottom Center Square -->
     <rect x="12" y="14" width="4" height="4" rx="1" />
-    
+
     <!-- Bottom Left Square -->
     <rect x="6" y="14" width="4" height="4" rx="1" />
   </g>

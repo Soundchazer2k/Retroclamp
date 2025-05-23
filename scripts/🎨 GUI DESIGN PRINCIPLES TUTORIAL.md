@@ -4,7 +4,7 @@
 
 ## 1. 🚀 Introduction
 
-> **Designing GUIs is about making software easy, efficient, and enjoyable to use.**  
+> **Designing GUIs is about making software easy, efficient, and enjoyable to use.**
 > Moving from text commands to visual interaction opens a world of intuitive digital experiences.
 
 - **A GUI** shows visual elements (icons, buttons, menus, windows).
@@ -63,14 +63,14 @@
 - **Status indicators:** Show ongoing processes
 
 - **Clear messaging:** Success, error, and warning messages
-  
+
   - Explain what went wrong & how to fix it
 
 - **Urgency levels:** Toast notifications vs. modal dialogs
 
 > ✅ *Reduces confusion, guides actions, supports recovery*
 
-> 💡 **Nielsen Heuristic:**  
+> 💡 **Nielsen Heuristic:**
 > *The system should always keep users informed about what’s going on—through timely, appropriate feedback.*
 
 ---
@@ -151,16 +151,16 @@
 ## 5. 🏁 Conclusion
 
 > **Great GUI design is an ongoing process—always focused on the user.**
-> 
+>
 > Apply:
-> 
+>
 > - 🎯 Consistency
-> 
+>
 > - 🧹 Simplicity
-> 
+>
 > - 🔔 Feedback
-> 
-> …and don’t forget:  
+>
+> …and don’t forget:
 > ♿ Accessibility, 🧑‍💻 User Testing, 🎨 Visual Design, 📚 IA, and 🧑‍🔬 Usability Heuristics.
 
 *Build apps that are intuitive, efficient, and a joy to use!*

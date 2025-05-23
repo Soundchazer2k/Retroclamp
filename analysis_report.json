@@ -1,0 +1,1876 @@
+{
+  "project_metrics": {
+    "total_files": 83,
+    "total_loc": 52182,
+    "total_functions": 622,
+    "total_classes": 82,
+    "comment_ratio": 4.009045264650646,
+    "docstring_coverage": 86.28261068645082,
+    "average_complexity": 23.16867469879518
+  },
+  "file_metrics": {
+    "compression_tab_backup.py": {
+      "path": "compression_tab_backup.py",
+      "lines_of_code": 1273,
+      "comment_lines": 326,
+      "blank_lines": 357,
+      "functions": 34,
+      "classes": 1,
+      "complexity": 230,
+      "imports": [
+        "core.chdman",
+        "os",
+        "core.file_scanner",
+        "shutil",
+        "zipfile",
+        "patoolib",
+        "modules.ui_functions",
+        "core.archive",
+        "time",
+        "PySide6.QtCore",
+        "PySide6.QtWidgets",
+        "core.compression_profiles",
+        "traceback"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'on_archive_finished': 167 lines",
+        "Long function 'setup_ui': 216 lines",
+        "Long function 'update_recommended_settings': 51 lines",
+        "Long function 'check_archive_compatibility': 136 lines",
+        "Long function 'extract_archive': 205 lines",
+        "Long function 'scan_files': 106 lines",
+        "Long function 'start_compression': 318 lines",
+        "Long function 'process_tasks': 78 lines",
+        "Long function '_unused_extract_archive': 61 lines",
+        "Long function 'scan_extracted_directory': 86 lines",
+        "High complexity function 'on_archive_finished': 33",
+        "High complexity function '_get_default_algorithms': 12",
+        "High complexity function 'check_archive_compatibility': 17",
+        "High complexity function 'extract_archive': 35",
+        "High complexity function 'scan_files': 15",
+        "High complexity function 'start_compression': 55",
+        "High complexity function 'scan_extracted_directory': 19"
+      ]
+    },
+    "create_test_dummies.py": {
+      "path": "create_test_dummies.py",
+      "lines_of_code": 37,
+      "comment_lines": 3,
+      "blank_lines": 7,
+      "functions": 3,
+      "classes": 0,
+      "complexity": 6,
+      "imports": [
+        "os"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "fixed_archive_extraction.py": {
+      "path": "fixed_archive_extraction.py",
+      "lines_of_code": 167,
+      "comment_lines": 24,
+      "blank_lines": 41,
+      "functions": 4,
+      "classes": 0,
+      "complexity": 36,
+      "imports": [
+        "os",
+        "shutil",
+        "zipfile",
+        "patoolib",
+        "time",
+        "sys",
+        "traceback"
+      ],
+      "docstring_coverage": 75.0,
+      "issues": [
+        "Long function 'scan_extracted_directory': 87 lines",
+        "Long function 'extract_archive': 89 lines",
+        "High complexity function 'scan_extracted_directory': 19",
+        "High complexity function 'extract_archive': 11"
+      ]
+    },
+    "fix_compression_tab.py": {
+      "path": "fix_compression_tab.py",
+      "lines_of_code": 40,
+      "comment_lines": 10,
+      "blank_lines": 14,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 9,
+      "imports": [
+        "sys",
+        "os"
+      ],
+      "docstring_coverage": 50.0,
+      "issues": []
+    },
+    "fix_duplicates.py": {
+      "path": "fix_duplicates.py",
+      "lines_of_code": 58,
+      "comment_lines": 4,
+      "blank_lines": 16,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 19,
+      "imports": [
+        "sys",
+        "os"
+      ],
+      "docstring_coverage": 50.0,
+      "issues": [
+        "Long function 'find_duplicate_methods': 55 lines",
+        "High complexity function 'find_duplicate_methods': 15"
+      ]
+    },
+    "focused_analysis.py": {
+      "path": "focused_analysis.py",
+      "lines_of_code": 564,
+      "comment_lines": 37,
+      "blank_lines": 114,
+      "functions": 12,
+      "classes": 2,
+      "complexity": 105,
+      "imports": [
+        "os",
+        "argparse",
+        "re",
+        "pathlib",
+        "typing",
+        "json",
+        "ast",
+        "sys",
+        "traceback",
+        "dataclasses"
+      ],
+      "docstring_coverage": 86.66666666666667,
+      "issues": [
+        "Long function 'main': 69 lines",
+        "Long function 'analyze_chdman_integration': 81 lines",
+        "Long function '_analyze_chdman_file': 73 lines",
+        "Long function 'analyze_plugin_system': 83 lines",
+        "Long function '_analyze_plugin_file': 56 lines",
+        "Long function 'analyze_gui_architecture': 99 lines",
+        "Long function '_analyze_gui_file': 66 lines",
+        "Long function 'print_analysis_report': 74 lines",
+        "High complexity function '_analyze_chdman_file': 18",
+        "High complexity function 'analyze_plugin_system': 11",
+        "High complexity function '_analyze_plugin_file': 11",
+        "High complexity function 'analyze_gui_architecture': 12",
+        "High complexity function '_analyze_gui_file': 14",
+        "High complexity function 'print_analysis_report': 17",
+        "Security risk: uses shell=True in subprocess"
+      ]
+    },
+    "main.py": {
+      "path": "main.py",
+      "lines_of_code": 603,
+      "comment_lines": 152,
+      "blank_lines": 139,
+      "functions": 15,
+      "classes": 1,
+      "complexity": 36,
+      "imports": [
+        "PySide6.QtGui",
+        "traceback",
+        "modules.theme_config",
+        "os",
+        "gui.tools_tab",
+        "gui.home_tab",
+        "modules.app_settings",
+        "gui.theme_tab",
+        "modules.ui_functions",
+        "PySide6.QtWidgets",
+        "gui.extraction_tab",
+        "gui.batch_tab",
+        "gui.title_bar",
+        "sys",
+        "PySide6.QtCore",
+        "gui.settings_tab",
+        "gui.compression_tab"
+      ],
+      "docstring_coverage": 94.11764705882352,
+      "issues": [
+        "Long function '__init__': 61 lines",
+        "Long function 'setup_ui': 368 lines",
+        "Long function 'change_page': 76 lines",
+        "Long function 'toggle_menu': 61 lines",
+        "Long function 'closeEvent': 58 lines",
+        "High complexity function 'closeEvent': 12"
+      ]
+    },
+    "manual_test.py": {
+      "path": "manual_test.py",
+      "lines_of_code": 171,
+      "comment_lines": 22,
+      "blank_lines": 45,
+      "functions": 8,
+      "classes": 2,
+      "complexity": 18,
+      "imports": [
+        "functools",
+        "core.chdman",
+        "os",
+        "shutil",
+        "core.batch_processor",
+        "pathlib",
+        "tempfile",
+        "threading",
+        "time",
+        "typing",
+        "logging",
+        "sys",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 63.63636363636363,
+      "issues": [
+        "Long function 'test_batch_processor': 119 lines",
+        "High complexity function 'test_batch_processor': 12"
+      ]
+    },
+    "quality_gates.py": {
+      "path": "quality_gates.py",
+      "lines_of_code": 480,
+      "comment_lines": 30,
+      "blank_lines": 124,
+      "functions": 11,
+      "classes": 0,
+      "complexity": 22,
+      "imports": [
+        "argparse",
+        "io",
+        "pathlib",
+        "yaml",
+        "typing",
+        "logging",
+        "json",
+        "subprocess",
+        "sys"
+      ],
+      "docstring_coverage": 83.33333333333334,
+      "issues": [
+        "Long function 'create_github_actions_workflow': 96 lines",
+        "Long function 'create_makefile': 51 lines",
+        "Long function 'create_scripts_directory': 98 lines",
+        "Long function 'create_development_readme': 68 lines",
+        "Long function 'main': 75 lines",
+        "Security risk: uses shell=True in subprocess"
+      ]
+    },
+    "retroclamp_analyzer.py": {
+      "path": "retroclamp_analyzer.py",
+      "lines_of_code": 419,
+      "comment_lines": 29,
+      "blank_lines": 96,
+      "functions": 15,
+      "classes": 3,
+      "complexity": 73,
+      "imports": [
+        "os",
+        "argparse",
+        "re",
+        "pathlib",
+        "collections",
+        "typing",
+        "json",
+        "ast",
+        "sys",
+        "dataclasses"
+      ],
+      "docstring_coverage": 78.94736842105263,
+      "issues": [
+        "Long function 'analyze_file': 110 lines",
+        "High complexity function 'analyze_file': 25",
+        "Security risk: uses shell=True in subprocess",
+        "Contains TODO/FIXME/HACK comments"
+      ]
+    },
+    "scan_extracted_directory.py": {
+      "path": "scan_extracted_directory.py",
+      "lines_of_code": 62,
+      "comment_lines": 10,
+      "blank_lines": 16,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 19,
+      "imports": [],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'scan_extracted_directory': 86 lines",
+        "High complexity function 'scan_extracted_directory': 19"
+      ]
+    },
+    "temp_scan_method.py": {
+      "path": "temp_scan_method.py",
+      "lines_of_code": 62,
+      "comment_lines": 10,
+      "blank_lines": 16,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 19,
+      "imports": [],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'scan_extracted_directory': 86 lines",
+        "High complexity function 'scan_extracted_directory': 19"
+      ]
+    },
+    "utils.py": {
+      "path": "utils.py",
+      "lines_of_code": 232,
+      "comment_lines": 5,
+      "blank_lines": 58,
+      "functions": 12,
+      "classes": 0,
+      "complexity": 11,
+      "imports": [
+        "os",
+        "PySide6.QtSvg",
+        "typing",
+        "logging",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "version.py": {
+      "path": "version.py",
+      "lines_of_code": 2,
+      "comment_lines": 0,
+      "blank_lines": 2,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "core\\archive.py": {
+      "path": "core\\archive.py",
+      "lines_of_code": 482,
+      "comment_lines": 28,
+      "blank_lines": 84,
+      "functions": 16,
+      "classes": 3,
+      "complexity": 60,
+      "imports": [
+        "os",
+        "core.file_scanner",
+        "shutil",
+        "tempfile",
+        "zipfile",
+        "patoolib",
+        "py7zr",
+        "datetime",
+        "typing",
+        "PySide6.QtCore",
+        "traceback"
+      ],
+      "docstring_coverage": 95.0,
+      "issues": [
+        "Long function '_extract': 83 lines",
+        "Long function '_extract_zip': 77 lines",
+        "High complexity function '_extract_zip': 13"
+      ]
+    },
+    "core\\batch_processor.py": {
+      "path": "core\\batch_processor.py",
+      "lines_of_code": 949,
+      "comment_lines": 65,
+      "blank_lines": 143,
+      "functions": 37,
+      "classes": 8,
+      "complexity": 108,
+      "imports": [
+        "hashlib",
+        "os",
+        "time",
+        "chdman",
+        "typing",
+        "enum",
+        "logging",
+        "json",
+        "sys",
+        "PySide6.QtCore",
+        "dataclasses"
+      ],
+      "docstring_coverage": 71.73913043478261,
+      "issues": [
+        "Long function 'from_dict': 64 lines",
+        "Long function 'start': 65 lines",
+        "Long function 'add_item': 73 lines",
+        "Long function '_process_next_item': 67 lines",
+        "Long function '_on_chd_progress': 53 lines",
+        "Long function '_write_state_to_file': 68 lines",
+        "Long function 'save_state': 83 lines",
+        "High complexity function 'from_dict': 12",
+        "High complexity function '_process_next_item': 12",
+        "High complexity function '_write_state_to_file': 11"
+      ]
+    },
+    "core\\chdman.py": {
+      "path": "core\\chdman.py",
+      "lines_of_code": 1268,
+      "comment_lines": 25,
+      "blank_lines": 126,
+      "functions": 47,
+      "classes": 13,
+      "complexity": 181,
+      "imports": [
+        "os",
+        "re",
+        "shutil",
+        "queue",
+        "modules.settings",
+        "threading",
+        "time",
+        "typing",
+        "enum",
+        "logging",
+        "subprocess",
+        "pathlib",
+        "PySide6.QtCore",
+        "dataclasses"
+      ],
+      "docstring_coverage": 21.311475409836063,
+      "issues": [
+        "Long function '_perform_pre_flight_checks': 94 lines",
+        "Long function '_execute_and_monitor_process': 262 lines",
+        "Long function '_handle_process_completion': 51 lines",
+        "Long function '_execute_with_qprocess': 72 lines",
+        "Long function 'execute_all_tasks': 53 lines",
+        "Long function '_delegate_task_to_chdman': 93 lines",
+        "High complexity function '_perform_pre_flight_checks': 24",
+        "High complexity function '_build_chdman_command': 11",
+        "High complexity function '_execute_and_monitor_process': 41",
+        "High complexity function '_handle_process_completion': 14",
+        "High complexity function '_parse_progress': 12",
+        "High complexity function 'execute_all_tasks': 12",
+        "High complexity function '_delegate_task_to_chdman': 17"
+      ]
+    },
+    "core\\checkpoint.py": {
+      "path": "core\\checkpoint.py",
+      "lines_of_code": 392,
+      "comment_lines": 18,
+      "blank_lines": 62,
+      "functions": 11,
+      "classes": 4,
+      "complexity": 36,
+      "imports": [
+        "os",
+        "time",
+        "datetime",
+        "typing",
+        "PySide6.QtCore",
+        "json",
+        "uuid",
+        "traceback",
+        "dataclasses"
+      ],
+      "docstring_coverage": 68.75,
+      "issues": [
+        "Long function 'load_checkpoint': 59 lines",
+        "Long function 'update_item': 53 lines"
+      ]
+    },
+    "core\\checkpoint_manager.py": {
+      "path": "core\\checkpoint_manager.py",
+      "lines_of_code": 175,
+      "comment_lines": 5,
+      "blank_lines": 47,
+      "functions": 6,
+      "classes": 1,
+      "complexity": 27,
+      "imports": [
+        "os",
+        "datetime",
+        "typing",
+        "logging",
+        "json"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "core\\compression_profiles.py": {
+      "path": "core\\compression_profiles.py",
+      "lines_of_code": 317,
+      "comment_lines": 36,
+      "blank_lines": 67,
+      "functions": 12,
+      "classes": 2,
+      "complexity": 44,
+      "imports": [
+        "typing",
+        "os",
+        "dataclasses"
+      ],
+      "docstring_coverage": 93.33333333333333,
+      "issues": [
+        "Long function '_create_default_profiles': 94 lines",
+        "Long function 'detect_console_type': 62 lines",
+        "Long function 'get_console_profile': 63 lines",
+        "High complexity function 'detect_console_type': 25"
+      ]
+    },
+    "core\\console_profiles.py": {
+      "path": "core\\console_profiles.py",
+      "lines_of_code": 234,
+      "comment_lines": 7,
+      "blank_lines": 33,
+      "functions": 8,
+      "classes": 2,
+      "complexity": 6,
+      "imports": [
+        "typing",
+        "compression_profiles"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function '_create_profiles': 153 lines"
+      ]
+    },
+    "core\\file_scanner.py": {
+      "path": "core\\file_scanner.py",
+      "lines_of_code": 377,
+      "comment_lines": 22,
+      "blank_lines": 80,
+      "functions": 15,
+      "classes": 6,
+      "complexity": 51,
+      "imports": [
+        "os",
+        "datetime",
+        "typing",
+        "PySide6.QtCore",
+        "fnmatch",
+        "traceback",
+        "dataclasses"
+      ],
+      "docstring_coverage": 77.27272727272727,
+      "issues": [
+        "Long function 'run': 106 lines",
+        "High complexity function 'run': 15"
+      ]
+    },
+    "core\\__init__.py": {
+      "path": "core\\__init__.py",
+      "lines_of_code": 0,
+      "comment_lines": 1,
+      "blank_lines": 1,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "gui\\batch_tab.py": {
+      "path": "gui\\batch_tab.py",
+      "lines_of_code": 1680,
+      "comment_lines": 253,
+      "blank_lines": 368,
+      "functions": 66,
+      "classes": 2,
+      "complexity": 280,
+      "imports": [
+        "zipfile",
+        "rarfile",
+        "core.chdman",
+        "modules.ui_functions",
+        "datetime",
+        "logging",
+        "PySide6.QtGui",
+        "PySide6.QtCore",
+        "traceback",
+        "os",
+        "tempfile",
+        "py7zr",
+        "PySide6.QtWidgets",
+        "core.file_scanner",
+        "utils",
+        "core.archive",
+        "time",
+        "pathlib",
+        "core.checkpoint_manager"
+      ],
+      "docstring_coverage": 82.6086956521739,
+      "issues": [
+        "Long function 'run': 60 lines",
+        "Long function '__init__': 79 lines",
+        "Long function '_process_dropped_directory': 148 lines",
+        "Long function 'setup_ui': 184 lines",
+        "Long function 'save_checkpoint': 71 lines",
+        "Long function 'load_checkpoint': 67 lines",
+        "Long function 'update_checkpoint_preview': 54 lines",
+        "Long function 'load_checkpoint_dialog': 64 lines",
+        "Long function 'update_ui_for_processing': 84 lines",
+        "Long function 'extract_archive': 78 lines",
+        "Long function 'start_processing': 119 lines",
+        "Long function 'cleanup_temp_directories': 59 lines",
+        "Long function 'process_regular_file': 61 lines",
+        "Long function 'task_completed': 66 lines",
+        "Long function 'on_extraction_finished': 52 lines",
+        "High complexity function '_process_dropped_directory': 21",
+        "High complexity function 'load_checkpoint': 15",
+        "High complexity function 'restore_ui_state_from_metadata': 11",
+        "High complexity function 'update_ui_for_processing': 24",
+        "High complexity function 'toggle_pause_resume': 13",
+        "High complexity function 'check_archive_compatibility': 12",
+        "High complexity function 'start_processing': 14",
+        "High complexity function 'cleanup_temp_directories': 14",
+        "High complexity function 'task_completed': 13",
+        "Contains TODO/FIXME/HACK comments"
+      ]
+    },
+    "gui\\compression_tab.py": {
+      "path": "gui\\compression_tab.py",
+      "lines_of_code": 738,
+      "comment_lines": 49,
+      "blank_lines": 142,
+      "functions": 40,
+      "classes": 1,
+      "complexity": 74,
+      "imports": [
+        "functools",
+        "core.chdman",
+        "core.file_scanner",
+        "shutil",
+        "pathlib",
+        "core.archive",
+        "datetime",
+        "typing",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function '_validate_inputs': 82 lines"
+      ]
+    },
+    "gui\\compression_tab_backup_before_async_patch.py": {
+      "path": "gui\\compression_tab_backup_before_async_patch.py",
+      "lines_of_code": 10,
+      "comment_lines": 2,
+      "blank_lines": 2,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "gui\\extraction_tab.py": {
+      "path": "gui\\extraction_tab.py",
+      "lines_of_code": 586,
+      "comment_lines": 82,
+      "blank_lines": 133,
+      "functions": 25,
+      "classes": 3,
+      "complexity": 61,
+      "imports": [
+        "core.chdman",
+        "os",
+        "core.file_scanner",
+        "shutil",
+        "zipfile",
+        "modules.ui_functions",
+        "core.archive",
+        "py7zr",
+        "PySide6.QtWidgets",
+        "pathlib",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 72.41379310344827,
+      "issues": [
+        "Long function 'setup_ui': 197 lines",
+        "Long function 'start_extraction': 164 lines",
+        "Long function 'check_archive_compatibility': 51 lines",
+        "High complexity function 'start_extraction': 21"
+      ]
+    },
+    "gui\\home_tab.py": {
+      "path": "gui\\home_tab.py",
+      "lines_of_code": 277,
+      "comment_lines": 32,
+      "blank_lines": 76,
+      "functions": 8,
+      "classes": 2,
+      "complexity": 4,
+      "imports": [
+        "version",
+        "modules.ui_functions",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function '__init__': 63 lines",
+        "Long function 'setup_ui': 187 lines"
+      ]
+    },
+    "gui\\m3u_tab.py": {
+      "path": "gui\\m3u_tab.py",
+      "lines_of_code": 59,
+      "comment_lines": 9,
+      "blank_lines": 15,
+      "functions": 3,
+      "classes": 1,
+      "complexity": 2,
+      "imports": [
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 25.0,
+      "issues": [
+        "Long function 'setup_ui': 52 lines"
+      ]
+    },
+    "gui\\scan_extracted_directory.py": {
+      "path": "gui\\scan_extracted_directory.py",
+      "lines_of_code": 55,
+      "comment_lines": 10,
+      "blank_lines": 16,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 16,
+      "imports": [],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'scan_extracted_directory': 79 lines",
+        "High complexity function 'scan_extracted_directory': 16"
+      ]
+    },
+    "gui\\settings_tab.py": {
+      "path": "gui\\settings_tab.py",
+      "lines_of_code": 459,
+      "comment_lines": 80,
+      "blank_lines": 120,
+      "functions": 19,
+      "classes": 1,
+      "complexity": 12,
+      "imports": [
+        "core.chdman",
+        "os",
+        "modules.app_settings",
+        "modules.ui_functions",
+        "modules.settings",
+        "PySide6.QtWidgets",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'setup_ui': 78 lines",
+        "Long function 'setup_general_tab': 82 lines",
+        "Long function 'setup_chdman_tab': 57 lines",
+        "Long function 'setup_performance_tab': 64 lines",
+        "Long function 'load_settings': 77 lines",
+        "Long function 'save_settings': 55 lines"
+      ]
+    },
+    "gui\\test_tools_tab.py": {
+      "path": "gui\\test_tools_tab.py",
+      "lines_of_code": 13,
+      "comment_lines": 0,
+      "blank_lines": 4,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 2,
+      "imports": [
+        "sys",
+        "PySide6.QtWidgets",
+        "tools_tab"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "gui\\theme_config.py": {
+      "path": "gui\\theme_config.py",
+      "lines_of_code": 96,
+      "comment_lines": 2,
+      "blank_lines": 17,
+      "functions": 4,
+      "classes": 1,
+      "complexity": 3,
+      "imports": [
+        "typing",
+        "dataclasses"
+      ],
+      "docstring_coverage": 83.33333333333334,
+      "issues": []
+    },
+    "gui\\theme_tab.py": {
+      "path": "gui\\theme_tab.py",
+      "lines_of_code": 352,
+      "comment_lines": 84,
+      "blank_lines": 123,
+      "functions": 13,
+      "classes": 2,
+      "complexity": 34,
+      "imports": [
+        "modules.theme_config",
+        "os",
+        "modules.app_settings",
+        "modules.ui_functions",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore",
+        "modules.theme_utils"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'setup_ui': 165 lines"
+      ]
+    },
+    "gui\\theme_utils.py": {
+      "path": "gui\\theme_utils.py",
+      "lines_of_code": 128,
+      "comment_lines": 9,
+      "blank_lines": 37,
+      "functions": 4,
+      "classes": 0,
+      "complexity": 4,
+      "imports": [
+        "PySide6.QtGui",
+        "typing",
+        "PySide6.QtCore",
+        "theme_config"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'apply_stylesheet': 76 lines"
+      ]
+    },
+    "gui\\title_bar.py": {
+      "path": "gui\\title_bar.py",
+      "lines_of_code": 141,
+      "comment_lines": 12,
+      "blank_lines": 29,
+      "functions": 8,
+      "classes": 1,
+      "complexity": 7,
+      "imports": [
+        "modules.ui_functions",
+        "PySide6.QtCore",
+        "PySide6.QtWidgets",
+        "modules.theme_utils"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function '__init__': 83 lines"
+      ]
+    },
+    "gui\\tools_tab.py": {
+      "path": "gui\\tools_tab.py",
+      "lines_of_code": 42,
+      "comment_lines": 2,
+      "blank_lines": 9,
+      "functions": 2,
+      "classes": 1,
+      "complexity": 1,
+      "imports": [
+        "tools.scummvm_generator",
+        "gui.m3u_tab",
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "gui\\ui_functions.py": {
+      "path": "gui\\ui_functions.py",
+      "lines_of_code": 115,
+      "comment_lines": 17,
+      "blank_lines": 30,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 16,
+      "imports": [
+        "PySide6.QtSvg",
+        "pathlib",
+        "typing",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'get_icon': 82 lines",
+        "Long function 'set_application_style': 60 lines",
+        "High complexity function 'get_icon': 15"
+      ]
+    },
+    "gui\\__init__.py": {
+      "path": "gui\\__init__.py",
+      "lines_of_code": 3,
+      "comment_lines": 0,
+      "blank_lines": 2,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "modules\\app_settings.py": {
+      "path": "modules\\app_settings.py",
+      "lines_of_code": 283,
+      "comment_lines": 40,
+      "blank_lines": 67,
+      "functions": 13,
+      "classes": 2,
+      "complexity": 42,
+      "imports": [
+        "typing",
+        "PySide6.QtCore",
+        "json"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "High complexity function 'load_settings': 11",
+        "High complexity function 'import_settings': 12"
+      ]
+    },
+    "modules\\settings.py": {
+      "path": "modules\\settings.py",
+      "lines_of_code": 12,
+      "comment_lines": 0,
+      "blank_lines": 6,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "modules\\spinner.py": {
+      "path": "modules\\spinner.py",
+      "lines_of_code": 158,
+      "comment_lines": 10,
+      "blank_lines": 44,
+      "functions": 14,
+      "classes": 1,
+      "complexity": 15,
+      "imports": [
+        "PySide6.QtGui",
+        "PySide6.QtCore",
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "modules\\theme_config.py": {
+      "path": "modules\\theme_config.py",
+      "lines_of_code": 676,
+      "comment_lines": 33,
+      "blank_lines": 143,
+      "functions": 5,
+      "classes": 2,
+      "complexity": 14,
+      "imports": [
+        "PySide6.QtCore",
+        "typing",
+        "os",
+        "json"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'generate_qss': 722 lines"
+      ]
+    },
+    "modules\\theme_utils.py": {
+      "path": "modules\\theme_utils.py",
+      "lines_of_code": 321,
+      "comment_lines": 28,
+      "blank_lines": 94,
+      "functions": 15,
+      "classes": 0,
+      "complexity": 16,
+      "imports": [
+        "PySide6.QtGui",
+        "typing",
+        "re"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'validate_theme_contrast': 108 lines",
+        "Long function 'adjust_color_for_contrast': 54 lines"
+      ]
+    },
+    "modules\\ui_functions.py": {
+      "path": "modules\\ui_functions.py",
+      "lines_of_code": 267,
+      "comment_lines": 44,
+      "blank_lines": 75,
+      "functions": 9,
+      "classes": 0,
+      "complexity": 22,
+      "imports": [
+        "modules.theme_config",
+        "os",
+        "PySide6.QtSvg",
+        "typing",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'load_svg_icon': 110 lines"
+      ]
+    },
+    "modules\\__init__.py": {
+      "path": "modules\\__init__.py",
+      "lines_of_code": 0,
+      "comment_lines": 1,
+      "blank_lines": 1,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\main.py": {
+      "path": "pydracula_reference\\main.py",
+      "lines_of_code": 72,
+      "comment_lines": 61,
+      "blank_lines": 34,
+      "functions": 6,
+      "classes": 1,
+      "complexity": 9,
+      "imports": [
+        "modules",
+        "os",
+        "platform",
+        "widgets",
+        "sys"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": [
+        "Long function '__init__': 74 lines",
+        "Contains TODO/FIXME/HACK comments"
+      ]
+    },
+    "pydracula_reference\\setup.py": {
+      "path": "pydracula_reference\\setup.py",
+      "lines_of_code": 17,
+      "comment_lines": 3,
+      "blank_lines": 6,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "sys",
+        "os",
+        "cx_Freeze"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\modules\\app_functions.py": {
+      "path": "pydracula_reference\\modules\\app_functions.py",
+      "lines_of_code": 18,
+      "comment_lines": 20,
+      "blank_lines": 5,
+      "functions": 1,
+      "classes": 1,
+      "complexity": 1,
+      "imports": [
+        "main"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": [
+        "Contains TODO/FIXME/HACK comments"
+      ]
+    },
+    "pydracula_reference\\modules\\app_settings.py": {
+      "path": "pydracula_reference\\modules\\app_settings.py",
+      "lines_of_code": 12,
+      "comment_lines": 4,
+      "blank_lines": 3,
+      "functions": 0,
+      "classes": 1,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\modules\\resources_rc.py": {
+      "path": "pydracula_reference\\modules\\resources_rc.py",
+      "lines_of_code": 34111,
+      "comment_lines": 32,
+      "blank_lines": 8,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "PySide6"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\modules\\ui_functions.py": {
+      "path": "pydracula_reference\\modules\\ui_functions.py",
+      "lines_of_code": 172,
+      "comment_lines": 72,
+      "blank_lines": 39,
+      "functions": 16,
+      "classes": 1,
+      "complexity": 24,
+      "imports": [
+        "main"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": [
+        "Long function 'uiDefinitions': 56 lines"
+      ]
+    },
+    "pydracula_reference\\modules\\ui_main.py": {
+      "path": "pydracula_reference\\modules\\ui_main.py",
+      "lines_of_code": 1471,
+      "comment_lines": 26,
+      "blank_lines": 167,
+      "functions": 2,
+      "classes": 1,
+      "complexity": 4,
+      "imports": [
+        "resources_rc",
+        "PySide6.QtGui",
+        "PySide6.QtCore",
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": [
+        "Long function 'setupUi': 1518 lines",
+        "Long function 'retranslateUi': 121 lines"
+      ]
+    },
+    "pydracula_reference\\modules\\__init__.py": {
+      "path": "pydracula_reference\\modules\\__init__.py",
+      "lines_of_code": 7,
+      "comment_lines": 19,
+      "blank_lines": 5,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "ui_functions",
+        "app_settings",
+        "ui_main",
+        "PySide6.QtWidgets",
+        "app_functions",
+        "PySide6.QtGui",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\widgets\\__init__.py": {
+      "path": "pydracula_reference\\widgets\\__init__.py",
+      "lines_of_code": 1,
+      "comment_lines": 15,
+      "blank_lines": 2,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "custom_grips"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "pydracula_reference\\widgets\\custom_grips\\custom_grips.py": {
+      "path": "pydracula_reference\\widgets\\custom_grips\\custom_grips.py",
+      "lines_of_code": 182,
+      "comment_lines": 29,
+      "blank_lines": 29,
+      "functions": 11,
+      "classes": 2,
+      "complexity": 17,
+      "imports": [
+        "PySide6.QtGui",
+        "PySide6.QtCore",
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": [
+        "Long function '__init__': 93 lines"
+      ]
+    },
+    "pydracula_reference\\widgets\\custom_grips\\__init__.py": {
+      "path": "pydracula_reference\\widgets\\custom_grips\\__init__.py",
+      "lines_of_code": 1,
+      "comment_lines": 15,
+      "blank_lines": 2,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "custom_grips"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "resources\\icons\\tabler-icons\\packages\\icons-webfont\\.build\\fix-outline.py": {
+      "path": "resources\\icons\\tabler-icons\\packages\\icons-webfont\\.build\\fix-outline.py",
+      "lines_of_code": 14,
+      "comment_lines": 0,
+      "blank_lines": 5,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "fontforge",
+        "sys"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "scripts\\chdman_security_check.py": {
+      "path": "scripts\\chdman_security_check.py",
+      "lines_of_code": 24,
+      "comment_lines": 2,
+      "blank_lines": 8,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 8,
+      "imports": [
+        "pathlib",
+        "sys"
+      ],
+      "docstring_coverage": 50.0,
+      "issues": [
+        "Security risk: uses shell=True in subprocess"
+      ]
+    },
+    "scripts\\parse_prd.py": {
+      "path": "scripts\\parse_prd.py",
+      "lines_of_code": 219,
+      "comment_lines": 16,
+      "blank_lines": 24,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 3,
+      "imports": [
+        "sys",
+        "datetime",
+        "pathlib",
+        "json"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'parse_prd': 234 lines"
+      ]
+    },
+    "scripts\\validate_plugins.py": {
+      "path": "scripts\\validate_plugins.py",
+      "lines_of_code": 32,
+      "comment_lines": 1,
+      "blank_lines": 11,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 10,
+      "imports": [
+        "pathlib",
+        "sys"
+      ],
+      "docstring_coverage": 50.0,
+      "issues": []
+    },
+    "tests\\tests_test_chdman_Version5.py": {
+      "path": "tests\\tests_test_chdman_Version5.py",
+      "lines_of_code": 18,
+      "comment_lines": 0,
+      "blank_lines": 6,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 2,
+      "imports": [
+        "subprocess",
+        "os",
+        "pytest"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\tests_test_chdtask_Version4.py": {
+      "path": "tests\\tests_test_chdtask_Version4.py",
+      "lines_of_code": 20,
+      "comment_lines": 0,
+      "blank_lines": 3,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "core.chdman"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\tests_test_extract_Version4.py": {
+      "path": "tests\\tests_test_extract_Version4.py",
+      "lines_of_code": 17,
+      "comment_lines": 0,
+      "blank_lines": 5,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "zipfile"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\tests_test_qt_env_Version4.py": {
+      "path": "tests\\tests_test_qt_env_Version4.py",
+      "lines_of_code": 6,
+      "comment_lines": 0,
+      "blank_lines": 3,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\tests_test_smoke_Version3.py": {
+      "path": "tests\\tests_test_smoke_Version3.py",
+      "lines_of_code": 4,
+      "comment_lines": 0,
+      "blank_lines": 3,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_archive_extraction.py": {
+      "path": "tests\\test_archive_extraction.py",
+      "lines_of_code": 12,
+      "comment_lines": 0,
+      "blank_lines": 6,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "zipfile",
+        "pytest"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_batch_processor.py": {
+      "path": "tests\\test_batch_processor.py",
+      "lines_of_code": 15,
+      "comment_lines": 0,
+      "blank_lines": 6,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "core.chdman",
+        "core.batch_processor",
+        "pytest"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_chdman.py": {
+      "path": "tests\\test_chdman.py",
+      "lines_of_code": 14,
+      "comment_lines": 0,
+      "blank_lines": 4,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 2,
+      "imports": [
+        "subprocess",
+        "os",
+        "pytest"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_chdman_deduplication.py": {
+      "path": "tests\\test_chdman_deduplication.py",
+      "lines_of_code": 18,
+      "comment_lines": 0,
+      "blank_lines": 6,
+      "functions": 1,
+      "classes": 1,
+      "complexity": 2,
+      "imports": [
+        "core.chdman",
+        "unittest.mock",
+        "unittest"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_compression_profiles.py": {
+      "path": "tests\\test_compression_profiles.py",
+      "lines_of_code": 94,
+      "comment_lines": 19,
+      "blank_lines": 31,
+      "functions": 8,
+      "classes": 1,
+      "complexity": 6,
+      "imports": [
+        "sys",
+        "core.chdman",
+        "core.compression_profiles",
+        "unittest",
+        "pathlib"
+      ],
+      "docstring_coverage": 90.0,
+      "issues": []
+    },
+    "tests\\test_compression_tab.py": {
+      "path": "tests\\test_compression_tab.py",
+      "lines_of_code": 4,
+      "comment_lines": 0,
+      "blank_lines": 2,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "core.compression_profiles"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_extract.py": {
+      "path": "tests\\test_extract.py",
+      "lines_of_code": 8,
+      "comment_lines": 0,
+      "blank_lines": 3,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "zipfile"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_qt_env.py": {
+      "path": "tests\\test_qt_env.py",
+      "lines_of_code": 4,
+      "comment_lines": 0,
+      "blank_lines": 3,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_scan_directory.py": {
+      "path": "tests\\test_scan_directory.py",
+      "lines_of_code": 8,
+      "comment_lines": 0,
+      "blank_lines": 5,
+      "functions": 2,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "os"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\test_worker_tracking.py": {
+      "path": "tests\\test_worker_tracking.py",
+      "lines_of_code": 13,
+      "comment_lines": 0,
+      "blank_lines": 5,
+      "functions": 4,
+      "classes": 1,
+      "complexity": 1,
+      "imports": [],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tests\\plugins\\run_all_plugin_tests.py": {
+      "path": "tests\\plugins\\run_all_plugin_tests.py",
+      "lines_of_code": 17,
+      "comment_lines": 3,
+      "blank_lines": 3,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 2,
+      "imports": [
+        "sys",
+        "os",
+        "unittest"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "tests\\plugins\\test_plugin_template.py": {
+      "path": "tests\\plugins\\test_plugin_template.py",
+      "lines_of_code": 35,
+      "comment_lines": 3,
+      "blank_lines": 9,
+      "functions": 3,
+      "classes": 1,
+      "complexity": 4,
+      "imports": [
+        "sys",
+        "importlib",
+        "os",
+        "unittest"
+      ],
+      "docstring_coverage": 60.0,
+      "issues": []
+    },
+    "test_files\\create_zip.py": {
+      "path": "test_files\\create_zip.py",
+      "lines_of_code": 11,
+      "comment_lines": 3,
+      "blank_lines": 4,
+      "functions": 0,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "zipfile",
+        "os"
+      ],
+      "docstring_coverage": 0.0,
+      "issues": []
+    },
+    "tools\\batch_processor.py": {
+      "path": "tools\\batch_processor.py",
+      "lines_of_code": 192,
+      "comment_lines": 20,
+      "blank_lines": 45,
+      "functions": 3,
+      "classes": 0,
+      "complexity": 18,
+      "imports": [
+        "sys",
+        "core.chdman",
+        "os",
+        "argparse",
+        "gui.batch_tab",
+        "pathlib"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'main': 151 lines",
+        "High complexity function 'main': 12"
+      ]
+    },
+    "tools\\plugin_template.py": {
+      "path": "tools\\plugin_template.py",
+      "lines_of_code": 25,
+      "comment_lines": 23,
+      "blank_lines": 15,
+      "functions": 1,
+      "classes": 0,
+      "complexity": 1,
+      "imports": [
+        "typing"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": []
+    },
+    "tools\\scummvm_generator.py": {
+      "path": "tools\\scummvm_generator.py",
+      "lines_of_code": 276,
+      "comment_lines": 27,
+      "blank_lines": 62,
+      "functions": 9,
+      "classes": 1,
+      "complexity": 17,
+      "imports": [
+        "os",
+        "re",
+        "modules.ui_functions",
+        "PySide6.QtWidgets",
+        "PySide6.QtCore"
+      ],
+      "docstring_coverage": 100.0,
+      "issues": [
+        "Long function 'setup_ui': 108 lines",
+        "Long function 'generate_config': 57 lines",
+        "High complexity function 'generate_config': 11"
+      ]
+    },
+    "tools\\__init__.py": {
+      "path": "tools\\__init__.py",
+      "lines_of_code": 183,
+      "comment_lines": 11,
+      "blank_lines": 42,
+      "functions": 9,
+      "classes": 2,
+      "complexity": 27,
+      "imports": [
+        "os",
+        "version",
+        "importlib",
+        "typing",
+        "PySide6.QtWidgets"
+      ],
+      "docstring_coverage": 91.66666666666666,
+      "issues": [
+        "Long function 'discover_plugins': 100 lines",
+        "High complexity function 'discover_plugins': 20"
+      ]
+    }
+  },
+  "architecture": {
+    "core_modules": [],
+    "gui_modules": [],
+    "tools_modules": [],
+    "test_modules": [
+      "create_test_dummies.py",
+      "manual_test.py",
+      "gui\\test_tools_tab.py",
+      "tests\\tests_test_chdman_Version5.py",
+      "tests\\tests_test_chdtask_Version4.py",
+      "tests\\tests_test_extract_Version4.py",
+      "tests\\tests_test_qt_env_Version4.py",
+      "tests\\tests_test_smoke_Version3.py",
+      "tests\\test_archive_extraction.py",
+      "tests\\test_batch_processor.py",
+      "tests\\test_chdman.py",
+      "tests\\test_chdman_deduplication.py",
+      "tests\\test_compression_profiles.py",
+      "tests\\test_compression_tab.py",
+      "tests\\test_extract.py",
+      "tests\\test_qt_env.py",
+      "tests\\test_scan_directory.py",
+      "tests\\test_worker_tracking.py",
+      "tests\\plugins\\run_all_plugin_tests.py",
+      "tests\\plugins\\test_plugin_template.py",
+      "test_files\\create_zip.py"
+    ],
+    "other_modules": [
+      "compression_tab_backup.py",
+      "fixed_archive_extraction.py",
+      "fix_compression_tab.py",
+      "fix_duplicates.py",
+      "focused_analysis.py",
+      "main.py",
+      "quality_gates.py",
+      "retroclamp_analyzer.py",
+      "scan_extracted_directory.py",
+      "temp_scan_method.py",
+      "utils.py",
+      "version.py",
+      "core\\archive.py",
+      "core\\batch_processor.py",
+      "core\\chdman.py",
+      "core\\checkpoint.py",
+      "core\\checkpoint_manager.py",
+      "core\\compression_profiles.py",
+      "core\\console_profiles.py",
+      "core\\file_scanner.py",
+      "core\\__init__.py",
+      "gui\\batch_tab.py",
+      "gui\\compression_tab.py",
+      "gui\\compression_tab_backup_before_async_patch.py",
+      "gui\\extraction_tab.py",
+      "gui\\home_tab.py",
+      "gui\\m3u_tab.py",
+      "gui\\scan_extracted_directory.py",
+      "gui\\settings_tab.py",
+      "gui\\theme_config.py",
+      "gui\\theme_tab.py",
+      "gui\\theme_utils.py",
+      "gui\\title_bar.py",
+      "gui\\tools_tab.py",
+      "gui\\ui_functions.py",
+      "gui\\__init__.py",
+      "modules\\app_settings.py",
+      "modules\\settings.py",
+      "modules\\spinner.py",
+      "modules\\theme_config.py",
+      "modules\\theme_utils.py",
+      "modules\\ui_functions.py",
+      "modules\\__init__.py",
+      "pydracula_reference\\main.py",
+      "pydracula_reference\\setup.py",
+      "pydracula_reference\\modules\\app_functions.py",
+      "pydracula_reference\\modules\\app_settings.py",
+      "pydracula_reference\\modules\\resources_rc.py",
+      "pydracula_reference\\modules\\ui_functions.py",
+      "pydracula_reference\\modules\\ui_main.py",
+      "pydracula_reference\\modules\\__init__.py",
+      "pydracula_reference\\widgets\\__init__.py",
+      "pydracula_reference\\widgets\\custom_grips\\custom_grips.py",
+      "pydracula_reference\\widgets\\custom_grips\\__init__.py",
+      "resources\\icons\\tabler-icons\\packages\\icons-webfont\\.build\\fix-outline.py",
+      "scripts\\chdman_security_check.py",
+      "scripts\\parse_prd.py",
+      "scripts\\validate_plugins.py",
+      "tools\\batch_processor.py",
+      "tools\\plugin_template.py",
+      "tools\\scummvm_generator.py",
+      "tools\\__init__.py"
+    ]
+  },
+  "dependencies": {
+    "all_imports": {
+      "os": 34,
+      "PySide6.QtCore": 29,
+      "typing": 23,
+      "PySide6.QtWidgets": 21,
+      "sys": 20,
+      "pathlib": 14,
+      "PySide6.QtGui": 14,
+      "core.chdman": 11,
+      "zipfile": 9,
+      "modules.ui_functions": 9,
+      "json": 9,
+      "traceback": 8,
+      "dataclasses": 8,
+      "shutil": 7,
+      "time": 7,
+      "logging": 7,
+      "datetime": 7,
+      "core.file_scanner": 5,
+      "re": 5,
+      "core.archive": 4
+    },
+    "external_dependencies": [
+      "PySide6",
+      "app_functions",
+      "app_settings",
+      "chdman",
+      "compression_profiles",
+      "custom_grips",
+      "cx_Freeze",
+      "enum",
+      "fnmatch",
+      "fontforge",
+      "functools",
+      "hashlib",
+      "importlib",
+      "io",
+      "logging",
+      "main",
+      "modules",
+      "patoolib",
+      "platform",
+      "py7zr",
+      "pytest",
+      "rarfile",
+      "resources_rc",
+      "shutil",
+      "tempfile",
+      "theme_config",
+      "tools_tab",
+      "traceback",
+      "ui_functions",
+      "ui_main",
+      "unittest",
+      "utils",
+      "uuid",
+      "version",
+      "widgets",
+      "yaml",
+      "zipfile"
+    ]
+  },
+  "retroclamp_patterns": {
+    "chdman_usage": [
+      "compression_tab_backup.py",
+      "fixed_archive_extraction.py",
+      "focused_analysis.py",
+      "main.py",
+      "manual_test.py",
+      "quality_gates.py",
+      "retroclamp_analyzer.py",
+      "scan_extracted_directory.py",
+      "temp_scan_method.py",
+      "core\\batch_processor.py",
+      "core\\chdman.py",
+      "core\\compression_profiles.py",
+      "core\\console_profiles.py",
+      "core\\file_scanner.py",
+      "gui\\batch_tab.py",
+      "gui\\compression_tab.py",
+      "gui\\extraction_tab.py",
+      "gui\\home_tab.py",
+      "gui\\scan_extracted_directory.py",
+      "gui\\settings_tab.py",
+      "modules\\app_settings.py",
+      "modules\\settings.py",
+      "scripts\\chdman_security_check.py",
+      "tests\\tests_test_chdman_Version5.py",
+      "tests\\tests_test_chdtask_Version4.py",
+      "tests\\test_batch_processor.py",
+      "tests\\test_chdman.py",
+      "tests\\test_chdman_deduplication.py",
+      "tests\\test_compression_profiles.py",
+      "tools\\batch_processor.py"
+    ],
+    "gui_threading": [
+      "compression_tab_backup.py",
+      "focused_analysis.py",
+      "manual_test.py",
+      "quality_gates.py",
+      "retroclamp_analyzer.py",
+      "core\\archive.py",
+      "core\\batch_processor.py",
+      "core\\chdman.py",
+      "core\\file_scanner.py",
+      "gui\\batch_tab.py",
+      "gui\\extraction_tab.py"
+    ],
+    "plugin_implementations": [
+      "focused_analysis.py",
+      "quality_gates.py",
+      "retroclamp_analyzer.py",
+      "scripts\\validate_plugins.py",
+      "tests\\plugins\\test_plugin_template.py",
+      "tools\\batch_processor.py",
+      "tools\\plugin_template.py",
+      "tools\\scummvm_generator.py",
+      "tools\\__init__.py"
+    ],
+    "security_issues": [
+      "focused_analysis.py: shell=True usage",
+      "quality_gates.py: shell=True usage",
+      "retroclamp_analyzer.py: shell=True usage",
+      "scripts\\chdman_security_check.py: shell=True usage"
+    ]
+  },
+  "summary": {
+    "total_issues": 164,
+    "top_issues": [
+      "Long function 'on_archive_finished': 167 lines",
+      "Long function 'setup_ui': 216 lines",
+      "Long function 'update_recommended_settings': 51 lines",
+      "Long function 'check_archive_compatibility': 136 lines",
+      "Long function 'extract_archive': 205 lines",
+      "Long function 'scan_files': 106 lines",
+      "Long function 'start_compression': 318 lines",
+      "Long function 'process_tasks': 78 lines",
+      "Long function '_unused_extract_archive': 61 lines",
+      "Long function 'scan_extracted_directory': 86 lines"
+    ],
+    "health_score": 45.0,
+    "recommendations": [
+      "Increase code comments (currently 4.0%)",
+      "Reduce function complexity (currently 23.2 average)",
+      "Set up CI/CD pipeline with automated quality checks",
+      "Consider adding type hints for better code maintainability",
+      "Review security issues, especially subprocess usage"
+    ]
+  }
+}

@@ -8,13 +8,13 @@ Potential Errors / Bugs:
 
         Issue: In start_compression, the signals.finished connection is:
 
-              
+
         signals.finished.connect(
             lambda success, message, row=row_for_task:
                 self.on_task_finished(row) # <--- success and message are ignored
         )
 
-            
+
 
         IGNORE_WHEN_COPYING_START
 
@@ -23,13 +23,13 @@ IGNORE_WHEN_COPYING_END
 
 The on_task_finished method then unconditionally updates the status to "Completed":
 
-      
+
 def on_task_finished(self, row):
     if row is not None and row >= 0 and row < self.files_table.rowCount():
         self.update_file_status(row, "Completed") # Always "Completed"
         # ...
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 Use code with caution. Python
@@ -40,7 +40,7 @@ Impact: Even if chdman finishes with an error that CHDManager reports via the su
 Fix:
 Modify the lambda and the on_task_finished method:
 
-      
+
 # In start_compression
 signals.finished.connect(
     lambda success, message, row=row_for_task:
@@ -63,7 +63,7 @@ def on_task_finished(self, success, message, row): # Add success and message
         self.log_message(f"Task finished (success: {success}) but couldn't determine which file. Message: {message}")
     # ... (rest of the method)
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -74,10 +74,10 @@ Synchronous Archive Extraction Freezes UI:
 
     Issue: The extract_archive method is synchronous.
 
-          
+
     success, temp_dir, extracted_files = self.extract_archive(input_path, row)
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -104,13 +104,13 @@ task_id Parameter in on_task_progress and on_task_error:
 
     Issue: The task_id parameter in on_task_progress and on_task_error is documented as "(unused, kept for backward compatibility)" and is always passed as None from the lambdas.
 
-          
+
     signals.progress.connect(
         lambda progress_value, message, row=row_for_task:
             self.on_task_progress(None, progress_value, row) # task_id is None
     )
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -123,7 +123,7 @@ Fix/Consideration:
 
     If task_id and message (for progress) are genuinely not needed, consider simplifying the lambda and the slot signatures:
 
-          
+
     # In start_compression for progress
     signals.progress.connect(
         lambda progress_value, _message, current_row=row_for_task: # Use _message to indicate unused
@@ -133,7 +133,7 @@ Fix/Consideration:
     def on_task_progress(self, progress, row): # No task_id
         # ...
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -146,10 +146,10 @@ Handling Multiple Files from an Archive:
 
     Issue: When an archive is extracted, extract_archive returns a list disk_images. However, start_compression only uses the first one:
 
-          
+
     actual_input_path = extracted_files[0]
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -174,11 +174,11 @@ Temporary Directory Location:
 
     Issue: Temporary directories for archive extraction are created in the same folder as the input archive:
 
-          
+
     input_folder = os.path.dirname(archive_path)
     temp_dir = os.path.join(input_folder, temp_dir_name)
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -195,7 +195,7 @@ Impact:
 
 Fix: Use Python's tempfile module to create temporary directories in a system-appropriate location.
 
-      
+
 import tempfile
 # ...
 # In extract_archive
@@ -216,7 +216,7 @@ temp_dir = os.path.join(base_temp_path, temp_dir_name)
 os.makedirs(temp_dir, exist_ok=True)
 self.temp_directories.append(temp_dir)
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -235,11 +235,11 @@ Redundant determine_task_type method:
 
     Issue: The method determine_task_type now simply returns CHDTaskType.COMPRESS.
 
-          
+
     def determine_task_type(self, file_path):
         return CHDTaskType.COMPRESS
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -248,12 +248,12 @@ IGNORE_WHEN_COPYING_END
 
 In start_compression, it's called but the result is already known:
 
-      
+
 # task_type = self.determine_task_type(input_path) # This line can be removed
 task_type = CHDTaskType.COMPRESS # And just use this directly
 self.log_message(f"Determined task type: {task_type}")
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -347,7 +347,7 @@ Potential Bugs / Critical Issues:
 
         Issue: In CHDManWorker.run(), when validating comma-separated algorithms, you detect common typos (e.g., "cdzlib" -> "cdzl") and print a warning, but the correction is not applied to the list that's actually used to build the command.
 
-              
+
         # Inside CHDManWorker.run()
         if ',' in self.compression:
             algorithms = self.compression.split(',') # Original list
@@ -364,7 +364,7 @@ Potential Bugs / Critical Issues:
             for algorithm in algorithms: # Still using the original, uncorrected 'algorithms' list
                 cmd.extend(["-c", algorithm])
 
-            
+
 
         IGNORE_WHEN_COPYING_START
 
@@ -375,7 +375,7 @@ Impact: The command will be built with the original, potentially incorrect, algo
 
 Fix: Create a new list of corrected algorithms or modify the existing list in place.
 
-      
+
 # Example fix
 if ',' in self.compression:
     original_algorithms = self.compression.split(',')
@@ -402,7 +402,7 @@ if ',' in self.compression:
     print(f"Using multiple compression algorithms: {','.join(corrected_algorithms)}")
 # Similar logic for single algorithm case
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -413,7 +413,7 @@ CHDManager.cleanup() Tries to Terminate Process on CHDTask:
 
     Issue: In CHDManager.cleanup(), self.current_task is a CHDTask (data class) instance, not a CHDManWorker instance. CHDTask does not have a .process attribute.
 
-          
+
     # In CHDManager.cleanup()
     if self.current_task and hasattr(self.current_task, 'process') and self.current_task.process:
         # self.current_task is a CHDTask, not a CHDManWorker
@@ -422,7 +422,7 @@ CHDManager.cleanup() Tries to Terminate Process on CHDTask:
             self.log("Terminating current CHDMAN process")
             self.current_task.process.terminate()
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -433,7 +433,7 @@ Impact: The cleanup logic for the current_task within CHDManager will not work a
 
 Fix: The CHDManager.cleanup() should primarily delegate to self.chdman.cleanup(), which correctly iterates active_workers. The self.current_task variable in CHDManager is more for tracking what logically is being processed, not for holding the worker.
 
-      
+
 # In CHDManager.cleanup()
 def cleanup(self):
     self.log("Cleaning up CHDManager resources...")
@@ -446,7 +446,7 @@ def cleanup(self):
     self.current_task = None
     self.log("CHDManager task queue cleared.")
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -464,7 +464,7 @@ Potential Memory Leak in CHDMan.active_workers:
     Fix (Conceptual): Workers should ideally be removed from active_workers when their run() method completes. This could be done by connecting to the worker's signals.finished or signals.error within the methods like create_cd, or by having the worker emit a "truly_finished" signal that CHDMan connects to for removal.
     Example using a finished signal connection (simplified):
 
-          
+
     # In CHDMan.create_cd (and similar methods)
     # ...
     self.active_workers.append(worker)
@@ -481,7 +481,7 @@ Potential Memory Leak in CHDMan.active_workers:
     #         self.active_workers.remove(worker_to_remove)
     #         print(f"Removed finished worker: {worker_to_remove}")
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -508,13 +508,13 @@ Potential Issues / Improvements:
 
         The fallback path logic in CHDManager.execute_all_tasks() if find_chdman() fails is a bit convoluted.
 
-              
+
         except Exception as e:
             print(f"CHDManager ERROR finding chdman: {str(e)}")
             # Try to use the default path as fallback
             # ... this repeats some logic from find_chdman itself
 
-            
+
 
         IGNORE_WHEN_COPYING_START
 
@@ -525,7 +525,7 @@ find_chdman() is quite thorough. If it fails, it should raise CHDManExecutableNo
 
 Suggestion: Simplify the error handling in execute_all_tasks. Let find_chdman() be the sole authority.
 
-      
+
 # In CHDManager.execute_all_tasks()
 if self.chdman.executable_path == "chdman":
     print("CHDManager: Looking for CHDMAN executable")
@@ -538,7 +538,7 @@ if self.chdman.executable_path == "chdman":
         # Potentially emit a global error signal or re-raise for the UI to handle
         raise # Or handle more gracefully
 
-    
+
 
 IGNORE_WHEN_COPYING_START
 
@@ -631,7 +631,7 @@ Interaction with CompressionTab.py (RetroClamp GUI)
 
         Conflict/Priority: CHDTask takes both compression_level and algorithms. CHDManager.execute_task prioritizes task.algorithms if present.
 
-              
+
         # In CHDManager.execute_task()
         if task.algorithms:
             compression = task.algorithms # This will be used
@@ -639,7 +639,7 @@ Interaction with CompressionTab.py (RetroClamp GUI)
             compression = "none"
         # ... other compression_level mappings
 
-            
+
 
         IGNORE_WHEN_COPYING_START
 
@@ -654,14 +654,14 @@ Media Type Detection:
 
     CHDManager.execute_task(): If task.media_type is not provided (which it is by CompressionTab), it has its own detection:
 
-          
+
     # In CHDManager.execute_task() if task.media_type is None
     media_type = "cd"  # Default to CD
     if ext == ".cue": media_type = "cd"
     elif ext == ".iso": media_type = "cd" if file_size < 734_003_200 else "dvd"
     elif ext in [".img", ".bin"]: media_type = "cd" if file_size < 734_003_200 else "dvd"
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 
@@ -676,11 +676,11 @@ CHDManManager.find_chdman() called from CompressionTab:
 
     CompressionTab.start_compression() has:
 
-          
+
     chdman_path = self.chd_manager.find_chdman() # CHDManager instance
     self.log_message(f"Found CHDMAN at: {chdman_path}")
 
-        
+
 
     IGNORE_WHEN_COPYING_START
 

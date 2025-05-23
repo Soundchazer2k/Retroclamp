@@ -1,7 +1,7 @@
 # RetroClamp Tool Roadmap PRD: Automating Common Frontend Configuration Tasks
 
-**Document Version:** 1.0  
-**Date:** 2025-05-19  
+**Document Version:** 1.0
+**Date:** 2025-05-19
 **Author:** Soundchazer
 
 ---
@@ -81,17 +81,17 @@ Each tool targets a specific friction point encountered when preparing ROMs for 
 - **Path Format:** Relative by default (configurable)
 
 - **Frontend Compatibility:**
-  
+
   - Batocera: hides disc files
-  
+
   - LaunchBox: supports M3U and adds discs as additional apps
-  
+
   - RetroArch: required for multi-disc support
 
 - **Preferences:**
-  
+
   - Move grouped discs to subfolder `/discs` (optional)
-  
+
   - Warn if disc count is less than expected (e.g. FF7 with 1 disc only)
 
 - **Test Case Required:** Sample PSX game with 3 discs, mixed naming
@@ -125,7 +125,7 @@ Each tool targets a specific friction point encountered when preparing ROMs for 
 - **Supported Frontends:** Batocera, LaunchBox, Pegasus, EmulationStation
 
 - **Example Schema:**
-  
+
   ```json
   {
     "batocera": {
@@ -259,7 +259,7 @@ Each tool targets a specific friction point encountered when preparing ROMs for 
 - **Input:** `.m3u` file, assigned emulator/core
 
 - **Reference Table:** JSON mapping of supported cores/emulators:
-  
+
   ```json
   {
     "RetroArch": ["Beetle PSX", "Flycast", "Genesis Plus GX"],

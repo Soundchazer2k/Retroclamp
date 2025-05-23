@@ -1,6 +1,8 @@
 import os
-import subprocess
+import subprocess  # nosec
+
 import pytest
+
 
 @pytest.fixture
 def chdman_path():
@@ -9,7 +11,12 @@ def chdman_path():
         pytest.skip("chdman.exe not found")
     return path
 
+
 def test_chdman_executes(chdman_path):
-    result = subprocess.run([chdman_path, "--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    assert result.returncode == 0
-    assert "usage" in result.stdout.lower()
+    result = subprocess.run(  # nosec
+        [chdman_path, "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0  # nosec
+    assert "usage" in result.stdout.lower()  # nosec

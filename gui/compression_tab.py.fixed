@@ -1,0 +1,931 @@
+"""Compression tab for RetroClamp - Refactored Version.
+
+This module provides the UI and functionality for compressing disk images
+using the CHDMAN utility.
+"""
+
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
+
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtWidgets import (
+QCheckBox,
+QComboBox,
+QFileDialog,
+QFormLayout,
+QGroupBox,
+QHBoxLayout,
+QLabel,
+QLineEdit,
+QMessageBox,
+QProgressBar,
+QPushButton,
+QSizePolicy,
+QTableWidget,
+QTableWidgetItem,
+QTextEdit,
+QVBoxLayout,
+QWidget,
+)
+
+from core.archive import ArchiveManager
+from core.chdman import CHDTask, CHDTaskType, get_chd_manager
+from core.file_scanner import FileScanner
+
+# Constants
+FILE_TABLE_COLUMNS = 3
+UI_UPDATE_INTERVAL_MS = 1000
+DEFAULT_LOG_FILENAME = "retroclamp.log"
+TEMP_EXTRACTION_DIR = "temp_extraction"
+
+# Compression profiles
+COMPRESSION_PROFILES = {
+"CD - Default": {
+"algorithms": "cdlz,cdzl,cdfl",
+"hunk_size": 19584,
+"media": "CD",
+},
+"CD - Fast": {
+"algorithms": "cdlz",
+"hunk_size": 19584,
+"media": "CD",
+},
+"DVD - Default": {
+"algorithms": "zlib,huff",
+"hunk_size": 2048,
+"media": "DVD",
+},
+"DVD - Best": {
+"algorithms": "lzma",
+"hunk_size": 2048,
+"media": "DVD",
+},
+"Hard Disk - Default": {
+"algorithms": "zlib,huff",
+"hunk_size": 4096,
+"media": "Hard Disk",
+},
+"Hard Disk - Best": {
+"algorithms": "lzma",
+"hunk_size": 4096,
+"media": "Hard Disk",
+},
+}
+
+
+class CompressionTab(QWidget):
+    """Compression tab widget.
+
+    This widget provides a UI for compressing disk images using CHDMAN.
+    """
+
+    # Custom signals for better communication
+    compression_started = Signal()
+    compression_finished = Signal(bool)  # success
+    file_processed = Signal(str, bool, str)  # file_path, success, message
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        """Initialize the CompressionTab widget.
+
+        Args:
+            parent: Parent widget
+            """
+            super().__init__(parent)
+
+            # Initialize managers
+            self.chd_manager = get_chd_manager()
+            self.archive_manager = ArchiveManager()
+            self.file_scanner = FileScanner()
+
+            # Initialize state
+            self.temp_directories: List[Path] = []
+            self.queued_files: Set[str] = set()
+            self.is_processing = False
+
+            # UI state timer for periodic updates
+            self.ui_timer = QTimer()
+            self.ui_timer.timeout.connect(self._update_ui_state)
+            self.ui_timer.start(UI_UPDATE_INTERVAL_MS)
+
+            # Setup UI and connect signals
+            self._build_ui()
+            self._connect_signals()
+            self._update_ui_state()
+
+            self._log_initialization()
+
+    def _log_initialization(self) -> None:
+        """Log initialization details."""
+        try:
+            with open(DEFAULT_LOG_FILENAME, "a", encoding="utf-8") as logf:
+                logf.write("[CompressionTab] Initialized with CHDMAN singleton.\n")
+                except Exception as e:
+            print(f"[CompressionTab] Error during initialization logging: {e}")
+
+    def _build_ui(self) -> None:
+        """Build the user interface."""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(18)
+        layout.setContentsMargins(18, 18, 18, 18)
+
+        # Build UI sections
+        layout.addWidget(self._create_input_section())
+        layout.addWidget(self._create_output_section())
+        layout.addWidget(self._create_options_section())
+        layout.addWidget(self._create_file_table_section(), 1)
+        layout.addWidget(self._create_log_section())
+        layout.addWidget(self._create_progress_section())
+        layout.addLayout(self._create_action_buttons())
+
+    def _create_input_section(self) -> QGroupBox:
+        """Create the input section of the UI."""
+        input_group = QGroupBox("Input")
+        input_group.setObjectName("InputGroup")
+        input_layout = QFormLayout()
+        input_layout.setSpacing(10)
+
+        self.input_path_edit = QLineEdit()
+        self.input_path_edit.setObjectName("InputPathEdit")
+        self.input_path_edit.setPlaceholderText(
+        "Select a disk image file or archive..."
+        )
+
+        self.browse_input_btn = QPushButton(QIcon("folder"), "Browse Input")
+        self.browse_input_btn.setToolTip("Select the file or archive to compress.")
+
+        input_row = QHBoxLayout()
+        input_row.addWidget(self.input_path_edit, 1)
+        input_row.addWidget(self.browse_input_btn)
+
+        input_layout.addRow(QLabel("Input File or Archive:"), input_row)
+        input_group.setLayout(input_layout)
+
+        return input_group
+
+    def _create_output_section(self) -> QGroupBox:
+        """Create the output section of the UI."""
+        output_group = QGroupBox("Output")
+        output_group.setObjectName("OutputGroup")
+        output_layout = QFormLayout()
+        output_layout.setSpacing(10)
+
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setObjectName("OutputDirEdit")
+        self.output_dir_edit.setPlaceholderText("Select output directory...")
+
+        self.browse_output_btn = QPushButton(QIcon("folder"), "Browse Output Dir")
+        self.browse_output_btn.setToolTip(
+        "Select the directory to save the compressed file."
+        )
+
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.output_dir_edit, 1)
+        output_row.addWidget(self.browse_output_btn)
+
+        output_layout.addRow(QLabel("Output Directory:"), output_row)
+
+        self.use_same_dir_check = QCheckBox("Use same directory as input")
+        self.use_same_dir_check.setChecked(True)
+        output_layout.addRow(self.use_same_dir_check)
+
+        # Add the missing overwrite checkbox
+        self.overwrite_check = QCheckBox("Overwrite existing files")
+        self.overwrite_check.setToolTip("Automatically overwrite existing CHD files")
+        output_layout.addRow(self.overwrite_check)
+
+        output_group.setLayout(output_layout)
+        return output_group
+
+    def _create_options_section(self) -> QGroupBox:
+        """Create the options section of the UI."""
+        options_group = QGroupBox("Options")
+        options_group.setObjectName("OptionsGroup")
+        options_layout = QHBoxLayout()
+
+        self.media_type_combo = QComboBox()
+        self.media_type_combo.addItems(["Auto Detect", "CD", "DVD", "Hard Disk"])
+        self.media_type_combo.setToolTip(
+        "Media type will be auto-detected based on file."
+        )
+
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(COMPRESSION_PROFILES.keys())
+        self.profile_combo.setToolTip("Choose a compression profile.")
+
+        options_layout.addWidget(QLabel("Media Type:"))
+        options_layout.addWidget(self.media_type_combo)
+        options_layout.addSpacing(24)
+        options_layout.addWidget(QLabel("Compression Profile:"))
+        options_layout.addWidget(self.profile_combo)
+
+        options_group.setLayout(options_layout)
+        return options_group
+
+    def _create_file_table_section(self) -> QGroupBox:
+        """Create the file table section of the UI."""
+        table_group = QGroupBox("Files to Process")
+        table_group.setObjectName("TableGroup")
+        table_layout = QVBoxLayout()
+
+        self.files_table = QTableWidget(0, FILE_TABLE_COLUMNS)
+        self.files_table.setObjectName("FilesTable")
+        self.files_table.setHorizontalHeaderLabels(["File", "Status", "Progress"])
+        self.files_table.horizontalHeader().setStretchLastSection(True)
+        self.files_table.setSizePolicy(
+        QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+
+        table_layout.addWidget(self.files_table)
+        table_group.setLayout(table_layout)
+
+        return table_group
+
+    def _create_log_section(self) -> QGroupBox:
+        """Create the log section of the UI."""
+        log_group = QGroupBox("Log Output")
+        log_group.setObjectName("LogGroup")
+        log_layout = QVBoxLayout()
+
+        self.log_panel = QTextEdit()
+        self.log_panel.setObjectName("LogPanel")
+        self.log_panel.setReadOnly(True)
+        self.log_panel.setMinimumHeight(120)
+        self.log_panel.setMaximumHeight(200)
+        log_layout.addWidget(self.log_panel)
+
+        # Log buttons
+        log_btn_row = QHBoxLayout()
+        self.export_log_btn = QPushButton(QIcon("download"), "Export Log")
+        self.export_log_btn.setToolTip("Export the log to a file.")
+
+        self.copy_log_btn = QPushButton(QIcon("clipboard"), "Copy Log")
+        self.copy_log_btn.setToolTip("Copy the log output to clipboard.")
+
+        self.clear_log_btn = QPushButton(QIcon("trash"), "Clear Log")
+        self.clear_log_btn.setToolTip("Clear the log output.")
+
+        log_btn_row.addWidget(self.export_log_btn)
+        log_btn_row.addWidget(self.copy_log_btn)
+        log_btn_row.addWidget(self.clear_log_btn)
+        log_layout.addLayout(log_btn_row)
+
+        log_group.setLayout(log_layout)
+        return log_group
+
+    def _create_progress_section(self) -> QGroupBox:
+        """Create the progress section of the UI."""
+        progress_group = QGroupBox("Overall Progress")
+        progress_group.setObjectName("ProgressGroup")
+        progress_layout = QVBoxLayout()
+
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setValue(0)
+        self.overall_progress.setTextVisible(True)
+        self.overall_progress.setFormat("Ready - %p%")
+
+        progress_layout.addWidget(self.overall_progress)
+        progress_group.setLayout(progress_layout)
+
+        return progress_group
+
+    def _create_action_buttons(self) -> QHBoxLayout:
+        """Create the action buttons section."""
+        btn_row = QHBoxLayout()
+
+        self.start_btn = QPushButton(QIcon("play"), "Start Compression")
+        self.start_btn.setToolTip("Begin compressing the selected file.")
+        self.start_btn.setDefault(True)
+
+        self.cancel_btn = QPushButton(QIcon("x"), "Cancel")
+        self.cancel_btn.setToolTip("Cancel the current operation.")
+        self.cancel_btn.setEnabled(False)
+
+        self.cleanup_btn = QPushButton(QIcon("broom"), "Cleanup Temp Directories")
+        self.cleanup_btn.setToolTip("Remove temporary files and folders.")
+
+        btn_row.addWidget(self.start_btn)
+        btn_row.addWidget(self.cancel_btn)
+        btn_row.addWidget(self.cleanup_btn)
+        btn_row.addStretch()
+
+        return btn_row
+
+    def _connect_signals(self) -> None:
+        """Connect widget signals to slots."""
+        # UI signals
+        self.browse_input_btn.clicked.connect(self.browse_input)
+        self.browse_output_btn.clicked.connect(self.browse_output)
+        self.use_same_dir_check.toggled.connect(self._on_same_dir_toggled)
+        self.media_type_combo.currentIndexChanged.connect(self._on_media_type_changed)
+        self.input_path_edit.textChanged.connect(self._on_input_path_changed)
+
+        # Action buttons
+        self.start_btn.clicked.connect(self.start_compression)
+        self.cancel_btn.clicked.connect(self.cancel_compression)
+        self.cleanup_btn.clicked.connect(self.cleanup_temp_directories)
+
+        # Log buttons
+        self.export_log_btn.clicked.connect(self.export_log)
+        self.copy_log_btn.clicked.connect(self.copy_log)
+        self.clear_log_btn.clicked.connect(self.clear_log)
+
+    def _on_input_path_changed(self, text: str) -> None:
+        """Handle input path changes."""
+        if text and Path(text).exists():
+            # Auto-set output directory if "use same dir" is checked
+            if self.use_same_dir_check.isChecked():
+                self.output_dir_edit.setText(str(Path(text).parent))
+
+                # Auto-detect media type and update profile
+                self._auto_detect_media_type(text)
+
+    def _on_same_dir_toggled(self, checked: bool) -> None:
+        """Handle same directory checkbox toggle."""
+        self.output_dir_edit.setEnabled(not checked)
+        if checked:
+            input_path = self.input_path_edit.text()
+            if input_path:
+                self.output_dir_edit.setText(str(Path(input_path).parent))
+
+    def _on_media_type_changed(self) -> None:
+        """Handle media type combo box changes."""
+        media_type = self.media_type_combo.currentText()
+        current_selection = self.profile_combo.currentText()
+
+        self.profile_combo.clear()
+
+        if media_type == "Auto Detect":
+            profiles = list(COMPRESSION_PROFILES.keys())
+            else:
+            profiles = [
+            name
+            for name, profile in COMPRESSION_PROFILES.items()
+            if profile.get("media") == media_type
+            ]
+
+            self.profile_combo.addItems(profiles)
+
+            # Try to restore previous selection if it's still valid
+            if current_selection in profiles:
+            self.profile_combo.setCurrentText(current_selection)
+
+    def _auto_detect_media_type(self, file_path: str) -> None:
+        """Auto-detect media type based on file properties."""
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return
+
+                # Check file extension first
+                extension = path.suffix.lower()
+                if extension in [".iso", ".bin", ".cue", ".img"]:
+                # Check file size to distinguish CD vs DVD
+                try:
+                    size_mb = path.stat().st_size / (1024 * 1024)
+                    if size_mb < 700:  # CD images are typically < 700MB
+                    self.media_type_combo.setCurrentText("CD")
+                    else:
+                        self.media_type_combo.setCurrentText("DVD")
+                        except OSError:
+                    self.media_type_combo.setCurrentText("CD")  # Default to CD
+                    elif extension in [".vhd", ".vmdk", ".raw"]:
+                self.media_type_combo.setCurrentText("Hard Disk")
+                else:
+                self.media_type_combo.setCurrentText("Auto Detect")
+                except Exception as e:
+            self.log_message(f"Error detecting media type: {e}", "warning")
+
+    def _update_ui_state(self) -> None:
+        """Update UI state based on current processing status."""
+        has_input = bool(self.input_path_edit.text().strip())
+        has_output = (
+        bool(self.output_dir_edit.text().strip())
+        or self.use_same_dir_check.isChecked()
+        )
+
+        # Enable/disable controls based on processing state
+        if self.is_processing:
+            self.start_btn.setEnabled(False)
+            self.start_btn.setText("Processing...")
+            self.cancel_btn.setEnabled(True)
+            self.browse_input_btn.setEnabled(False)
+            self.browse_output_btn.setEnabled(False)
+            self.use_same_dir_check.setEnabled(False)
+            self.media_type_combo.setEnabled(False)
+            self.profile_combo.setEnabled(False)
+            self.overwrite_check.setEnabled(False)
+            else:
+            self.start_btn.setEnabled(has_input and has_output)
+            self.start_btn.setText("Start Compression")
+            self.cancel_btn.setEnabled(False)
+            self.browse_input_btn.setEnabled(True)
+            self.browse_output_btn.setEnabled(True)
+            self.use_same_dir_check.setEnabled(True)
+            self.media_type_combo.setEnabled(True)
+            self.profile_combo.setEnabled(True)
+            self.overwrite_check.setEnabled(True)
+
+    def browse_input(self) -> None:
+        """Open file dialog to select input file or archive."""
+        file_path, _ = QFileDialog.getOpenFileName(
+        self,
+        "Select Input File or Archive",
+        "",
+        "All Supported (*.iso *.bin *.cue *.img *.zip *.7z *.rar);;All Files (*)",
+        )
+        if file_path:
+            self.input_path_edit.setText(file_path)
+
+    def browse_output(self) -> None:
+        """Open directory dialog to select output directory."""
+        directory = QFileDialog.getExistingDirectory(
+        self, "Select Output Directory", ""
+        )
+        if directory:
+            self.output_dir_edit.setText(str(Path(directory)))
+
+    def add_file_to_table(self, file_path: str) -> int:
+        """Add file to the files table if not already present.
+
+        Args:
+            file_path: Path to the file to add
+
+            Returns:
+            Row index of the added/existing file
+            """
+            # Normalize path
+            normalized_path = str(Path(file_path).resolve())
+
+            # Check for duplicates
+            for row in range(self.files_table.rowCount()):
+            existing = self.files_table.item(row, 0)
+            if existing and existing.text() == normalized_path:
+                return row
+
+                # Add new row
+                row = self.files_table.rowCount()
+                self.files_table.insertRow(row)
+
+                file_item = QTableWidgetItem(normalized_path)
+                status_item = QTableWidgetItem("Pending")
+                progress_bar = QProgressBar()
+                progress_bar.setRange(0, 100)
+                progress_bar.setValue(0)
+                progress_bar.setFormat("%p%")
+
+                self.files_table.setItem(row, 0, file_item)
+                self.files_table.setItem(row, 1, status_item)
+                self.files_table.setCellWidget(row, 2, progress_bar)
+
+                return row
+
+    def update_file_status(self, row: int, status: str) -> None:
+        """Update file status in the table."""
+        if 0 <= row < self.files_table.rowCount():
+            self.files_table.setItem(row, 1, QTableWidgetItem(status))
+
+    def update_file_progress(self, row: int, progress: int) -> None:
+        """Update the progress bar for a given row in the files table."""
+        if 0 <= row < self.files_table.rowCount():
+            progress_bar = self.files_table.cellWidget(row, 2)
+            if isinstance(progress_bar, QProgressBar):
+                progress_bar.setValue(progress)
+
+    def log_message(self, message: str, level: str = "info") -> None:
+        """Append a message to the log widget."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] [{level.upper()}] {message}"
+        self.log_panel.append(formatted)
+
+        # Auto-scroll to bottom
+        scrollbar = self.log_panel.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+        # Also write to log file for persistent debugging
+        try:
+            with open(DEFAULT_LOG_FILENAME, "a", encoding="utf-8") as logf:
+                logf.write(formatted + "\n")
+                except Exception as e:
+            print(f"[CompressionTab] Error writing to log file: {e}")
+
+    def clear_log(self) -> None:
+        """Clear the log output."""
+        self.log_panel.clear()
+        self.log_message("Log cleared", "info")
+
+    def export_log(self) -> None:
+        """Export the log contents to a file."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"retroclamp_log_{timestamp}.txt"
+
+        filename, _ = QFileDialog.getSaveFileName(
+        self,
+        "Export Log",
+        default_name,
+        "Text Files (*.txt);;HTML Files (*.html)",
+        )
+        if filename:
+            content = (
+            self.log_panel.toHtml()
+            if filename.endswith(".html")
+            else self.log_panel.toPlainText()
+            )
+            try:
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(content)
+                    self.log_message(f"Log exported to {filename}", level="success")
+                    except OSError as e:
+                self.log_message(f"Failed to export log: {e}", level="error")
+
+    def copy_log(self) -> None:
+        """Copy the log contents to the clipboard."""
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText(self.log_panel.toPlainText())
+        self.log_message("Log copied to clipboard", level="success")
+
+        from typing import Tuple
+
+    def _validate_inputs(self) -> Tuple[Optional[Path], Optional[Path]]:
+    """Validate input and output paths.
+
+    Returns:
+            Tuple of (input_path, output_path) or (None, None) if invalid
+            """
+            # Validate input
+            input_text = self.input_path_edit.text().strip()
+            if not input_text:
+            QMessageBox.warning(
+            self, "Invalid Input", "Please specify an input file or archive."
+            )
+            self.log_message(
+            "Compression aborted: Input file not specified.", level="warning"
+            )
+            return None, None
+
+            input_path = Path(input_text)
+            if not input_path.exists():
+            QMessageBox.warning(
+            self,
+            "Invalid Input",
+            f"The specified input file does not exist: {input_text}",
+            )
+            self.log_message(
+            f"Compression aborted: Input file does not exist: {input_text}",
+            level="warning",
+            )
+            return None, None
+
+            # Validate output
+            if self.use_same_dir_check.isChecked():
+            output_path = input_path.parent
+            else:
+            output_text = self.output_dir_edit.text().strip()
+            if not output_text:
+                QMessageBox.warning(
+                self, "Invalid Output", "Please specify an output directory."
+                )
+                self.log_message(
+                "Compression aborted: Output directory not specified.",
+                level="warning",
+                )
+                return None, None
+                output_path = Path(output_text)
+
+                if not output_path.exists():
+            QMessageBox.warning(
+            self,
+            "Invalid Output",
+            f"The specified output directory does not exist: {output_path}",
+            )
+            self.log_message(
+            f"Compression aborted: Output directory does not exist: {output_path}",
+            level="warning",
+            )
+            return None, None
+
+            try:
+            # Test write permissions
+            test_file = output_path / ".write_test"
+            test_file.touch()
+            test_file.unlink()
+            except OSError:
+            QMessageBox.warning(
+            self,
+            "Invalid Output",
+            f"The specified output directory is not writable: {output_path}",
+            )
+            self.log_message(
+            f"Compression aborted: Output directory not writable: {output_path}",
+            level="warning",
+            )
+            return None, None
+
+            return input_path, output_path
+
+    def start_compression(self) -> None:
+        """Start the compression process."""
+        self.log_message("Starting compression process...")
+
+        # Validate inputs
+        input_path, output_path = self._validate_inputs()
+        if not input_path or not output_path:
+            return
+
+            # Clear previous state
+            self.chd_manager.clear_tasks()
+            self.queued_files.clear()
+            self.files_table.setRowCount(0)
+
+            # Set processing state
+            self.is_processing = True
+            self.overall_progress.setValue(0)
+            self.overall_progress.setFormat("Starting...")
+
+            # Process the input
+            if self.archive_manager.is_archive(str(input_path)):
+            self._process_archive(input_path, output_path)
+            else:
+            self._process_single_file(input_path, output_path)
+
+
+    def _process_single_file(self, input_path: Path, output_path: Path) -> None:
+        """Process a single disk image file."""
+        try:
+            # Add to table
+            row = self.add_file_to_table(str(input_path))
+            self.update_file_status(row, "Preparing")
+
+            # Create output file path
+            output_file = output_path / f"{input_path.stem}.chd"
+
+            # Check if output exists and handle overwrite
+            if output_file.exists() and not self.overwrite_check.isChecked():
+                self.update_file_status(row, "Skipped - File exists")
+                self.log_message(
+                f"Skipped {input_path.name}: Output file already exists"
+                )
+                self.is_processing = False
+                self.overall_progress.setFormat("Completed")
+                return
+
+                # Get compression settings
+                profile = self._get_current_profile()
+                media_type = self._detect_media_type(input_path)
+
+                # Create task
+                task = CHDTask(
+                task_type=CHDTaskType.COMPRESS,
+                input_file=str(input_path),
+                output_file=str(output_file),
+                algorithms=profile["algorithms"],
+                hunk_size=profile["hunk_size"],
+                force=self.overwrite_check.isChecked(),
+                media_type=media_type,
+                user_data={"row": row, "file_path": str(input_path)},
+                )
+
+                self.chd_manager.add_task(task)
+                self.update_file_status(row, "Queued")
+
+                # Execute tasks
+                self._execute_tasks()
+
+                except Exception as e:
+            self.log_message(f"Error processing file {input_path}: {e}", level="error")
+            self.is_processing = False
+            self.overall_progress.setFormat("Error")
+
+
+    def _process_archive(self, input_path: Path, output_path: Path) -> None:
+        """Process an archive file."""
+        # Placeholder implementation
+        self.log_message("Archive processing not yet implemented", level="warning")
+        QMessageBox.information(
+        self,
+        "Archive Processing",
+        "Archive processing will be implemented in the next iteration.",
+        )
+        self.is_processing = False
+        self.overall_progress.setFormat("Not implemented")
+        raise NotImplementedError("Archive processing not yet implemented")
+
+
+    def _execute_tasks(self) -> None:
+        """Execute all queued tasks."""
+        try:
+            workers = self.chd_manager.execute_all_tasks()
+            if not workers:
+                self.log_message("No tasks to execute")
+                self.is_processing = False
+                self.overall_progress.setFormat("No tasks")
+                return
+
+                # Connect to completion signals
+                for worker in workers:
+                self._connect_worker_signals(worker)
+
+                self.log_message(f"Started {len(workers)} compression tasks")
+                self.overall_progress.setFormat("Processing...")
+
+                except Exception as e:
+            self.log_message(f"Error executing tasks: {e}", level="error")
+            self.is_processing = False
+            self.overall_progress.setFormat("Error")
+
+
+    def _connect_worker_signals(self, worker) -> None:
+        """Connect signals from a worker to UI handlers."""
+        import functools
+
+        if not worker or not hasattr(worker, "signals"):
+            self.log_message("Worker has no signals to connect", level="warning")
+            return
+            try:
+            user_data = getattr(worker, "user_data", {})
+            row = user_data.get("row", 0)
+            file_path = user_data.get("file_path", "Unknown")
+            # Use functools.partial for clarity
+            worker.signals.started.connect(
+            functools.partial(
+            self.log_message, f"Started: {file_path}", level="info"
+            )
+            )
+            worker.signals.progress.connect(
+            functools.partial(self._on_worker_progress, row)
+            )
+            worker.signals.finished.connect(
+            functools.partial(self._on_worker_finished, row)
+            )
+            worker.signals.error.connect(functools.partial(self._on_worker_error, row))
+            self.log_message(f"Connected signals for worker processing {file_path}")
+            except Exception as e:
+            self.log_message(f"Error connecting worker signals: {e}", level="error")
+            self.is_processing = False
+
+
+    def _on_worker_progress(self, row: int, progress: float, message: str) -> None:
+        """Handle progress updates from workers."""
+        try:
+            self.update_file_progress(row, int(progress))
+            if progress > 0:
+                self.update_file_status(row, "Processing")
+                self.log_message(f"Progress {progress:.1f}%: {message}", level="info")
+                except Exception as e:
+            self.log_message(f"Error handling progress: {e}", level="error")
+
+
+    def _on_worker_finished(self, row: int, success: bool, message: str) -> None:
+        """Handle worker completion."""
+        try:
+            if success:
+                self.update_file_status(row, "Completed")
+                self.update_file_progress(row, 100)
+                self.log_message(f"Completed: {message}", level="success")
+                else:
+                self.update_file_status(row, "Failed")
+                self.log_message(f"Failed: {message}", level="error")
+                self._check_all_tasks_complete()
+                except Exception as e:
+            self.log_message(f"Error handling completion: {e}", level="error")
+
+
+    def _on_worker_error(self, row: int, error_message: str) -> None:
+        """Handle worker errors."""
+        try:
+            self.update_file_status(row, "Error")
+            self.log_message(f"Error: {error_message}", level="error")
+            self._check_all_tasks_complete()
+            except Exception as e:
+            self.log_message(f"Error handling worker error: {e}", level="error")
+
+
+    def _check_all_tasks_complete(self) -> None:
+        """Check if all tasks are complete and update UI accordingly."""
+        try:
+            completed = failed = 0
+            for row in range(self.files_table.rowCount()):
+                status_item = self.files_table.item(row, 1)
+                if status_item:
+                    status = status_item.text()
+                    if status in ["Completed", "Skipped - File exists"]:
+                        completed += 1
+                        elif status in ["Failed", "Error"]:
+                        failed += 1
+                        total = self.files_table.rowCount()
+                        if completed + failed >= total and total > 0:
+                self.is_processing = False
+                self.overall_progress.setValue(100)
+                if failed == 0:
+                    self.overall_progress.setFormat("All files completed successfully")
+                    self.log_message(
+                    f"All {completed} files processed successfully!",
+                    level="success",
+                    )
+                    else:
+
+                    self.overall_progress.setFormat(f"Completed with {failed} errors")
+                    self.log_message(
+                    f"Processing complete: {completed} succeeded, {failed} failed",
+                    level="warning",
+                    )
+                    # Show a notification if there are failures
+                    QMessageBox.warning(
+                    self,
+                    "Compression Completed with Errors",
+                    f"{completed} files succeeded, {failed} failed. "
+                    "Check the log for details.",
+                    )
+                    except Exception as e:
+            self.log_message(f"Error checking task completion: {e}", level="error")
+
+    def _get_current_profile(self) -> Dict[str, Any]:
+        """Get the currently selected compression profile."""
+        profile_name = self.profile_combo.currentText()
+        if profile_name in COMPRESSION_PROFILES:
+            return COMPRESSION_PROFILES[profile_name]
+
+            # Fallback to first profile
+            return list(COMPRESSION_PROFILES.values())[0]
+
+    def _detect_media_type(self, file_path: Path) -> str:
+        """Detect media type based on file properties."""
+        try:
+            size_mb = file_path.stat().st_size / (1024 * 1024)
+            if size_mb < 700:
+                return "CD"
+                elif size_mb < 8500:
+                return "DVD"
+                else:
+                return "HD"
+                except OSError:
+            return "CD"  # Default fallback
+
+    def cancel_compression(self) -> None:
+        """Cancel the current compression operation."""
+        self.log_message("Cancelling compression...", level="warning")
+
+        # Terminate all processes
+        self.chd_manager.terminate_all_chdman_processes()
+
+        # Update UI state
+        self.is_processing = False
+        self.overall_progress.setFormat("Cancelled")
+
+        # Update file statuses
+        for row in range(self.files_table.rowCount()):
+            status_item = self.files_table.item(row, 1)
+            if status_item and status_item.text() in [
+            "Pending",
+            "Queued",
+            "Processing",
+            ]:
+                self.update_file_status(row, "Cancelled")
+
+                self.log_message("Compression cancelled by user")
+
+    def cleanup_temp_directories(self) -> None:
+        """Clean up temporary directories."""
+        if not self.temp_directories:
+            self.log_message("No temporary directories to clean up")
+            return
+
+            self.log_message(
+            f"Cleaning up {len(self.temp_directories)} temporary directories..."
+            )
+
+            cleaned = 0
+            for temp_dir in self.temp_directories:
+            try:
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+                    cleaned += 1
+                    self.log_message(f"Cleaned up: {temp_dir}")
+                    except Exception as e:
+                self.log_message(f"Failed to clean up {temp_dir}: {e}", level="error")
+
+                self.temp_directories.clear()
+                self.log_message(f"Cleanup complete. Removed {cleaned} directories")
+
+    def closeEvent(self, event) -> None:
+        """Handle widget close event."""
+        try:
+            # Cancel any running operations
+            if self.is_processing:
+                self.cancel_compression()
+
+                # Clean up temporary directories
+                self.cleanup_temp_directories()
+
+                # Stop the UI timer
+                if self.ui_timer.isActive():
+                self.ui_timer.stop()
+
+                # Accept the close event
+                event.accept()
+
+                except Exception as e:
+            self.log_message(f"Error during close: {e}", level="error")
+            event.accept()  # Accept anyway to prevent hanging

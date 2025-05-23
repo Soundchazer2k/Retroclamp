@@ -1,9 +1,18 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog, QTableWidget
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QVBoxLayout,
+    QWidget,
 )
+
 
 class M3UTab(QWidget):
     """M3U Playlist Tool for managing multi-disc games."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
@@ -18,7 +27,10 @@ class M3UTab(QWidget):
         title.setStyleSheet("font-size: 16pt; font-weight: bold;")
         layout.addWidget(title)
 
-        desc = QLabel("Automatically detect multi-disc games and generate M3U playlists for seamless multi-disc emulation.")
+        desc = QLabel(
+            "Automatically detect multi-disc games and generate M3U playlists for "
+            "seamless multi-disc emulation."
+        )
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
@@ -36,7 +48,9 @@ class M3UTab(QWidget):
         # Table of detected multi-disc games
         self.games_table = QTableWidget()
         self.games_table.setColumnCount(4)
-        self.games_table.setHorizontalHeaderLabels(["Game Name", "Discs Found", "M3U Exists", "Action"])
+        self.games_table.setHorizontalHeaderLabels(
+            ["Game Name", "Discs Found", "M3U Exists", "Action"]
+        )
         layout.addWidget(self.games_table)
 
         # Batch action buttons
@@ -51,6 +65,7 @@ class M3UTab(QWidget):
 
         # Status/log output
         from PySide6.QtWidgets import QTextEdit
+
         self.log_panel = QTextEdit()
         self.log_panel.setReadOnly(True)
         layout.addWidget(self.log_panel)

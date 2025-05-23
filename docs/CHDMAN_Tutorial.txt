@@ -20,11 +20,11 @@ Here are the key reasons why someone would use CHDMAN:
 
     File Consolidation and Organization: For CD images, games are often dumped as a .cue file and numerous .bin files (one for each track). This can clutter directories. CHDMAN combines all these into a single .chd file, making the archive much cleaner and easier to manage.
 
-    Standardization for Emulation: The CHD format is widely supported by many emulators, particularly those derived from or associated with MAME (where the format originated), but also increasingly by cores used in frontend emulators like RetroArch for systems like PlayStation, Sega CD, Dreamcast, etc. Using CHD provides a consistent format across different emulators and systems.   
+    Standardization for Emulation: The CHD format is widely supported by many emulators, particularly those derived from or associated with MAME (where the format originated), but also increasingly by cores used in frontend emulators like RetroArch for systems like PlayStation, Sega CD, Dreamcast, etc. Using CHD provides a consistent format across different emulators and systems.
 
 Improved Performance in Some Emulators: In some cases, depending on the emulator and storage medium, using a CHD file can potentially offer faster loading times or better performance compared to using a fragmented set of original files, as the emulator interacts with a single, structured file.
 
-Data Integrity: The CHD format includes built-in checksums. The chdman utility allows users to verify the integrity of a CHD file (chdman verify), ensuring that the data has not been corrupted over time. The chdman info command also provides checksums for reference.  
+Data Integrity: The CHD format includes built-in checksums. The chdman utility allows users to verify the integrity of a CHD file (chdman verify), ensuring that the data has not been corrupted over time. The chdman info command also provides checksums for reference.
 
     Handling Complex Media Layouts: The format is designed to handle the complexities of various media types, including different track types on CDs (data, audio) and the structure of hard disk images, in a consistent container.
 
@@ -160,4 +160,3 @@ Section 3: General Command-Line Considerations
 Section 4: Conclusion
 
 chdman is a powerful command-line tool for managing CHD files for emulation purposes. Understanding its commands, required arguments, and standard options allows users to effectively compress and extract various media images. Its functionality revolves around taking specified input file(s), performing an operation based on the chosen command and options, and producing an output file or reporting information/status.
-

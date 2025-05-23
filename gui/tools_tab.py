@@ -1,11 +1,10 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTabWidget
-)
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
-from tools.scummvm_generator import ScummVMGenerator
 from gui.m3u_tab import M3UTab
+from tools.scummvm_generator import ScummVMGenerator
 
 print("RUNNING tools_tab.py FROM:", __file__)
+
 
 class ToolsTab(QWidget):
     def __init__(self, parent=None):
@@ -20,8 +19,10 @@ class ToolsTab(QWidget):
         # --- QTabWidget for Tool Panels ---
         self.tab_widget = QTabWidget()
         self.tab_widget.setObjectName("toolsTabWidget")
-        # Match tab styling to compression section (if needed, copy stylesheet from main.py)
-        self.tab_widget.setStyleSheet("""
+        # Match tab styling to compression section
+        # (if needed, copy stylesheet from main.py)
+        self.tab_widget.setStyleSheet(
+            """
             QTabBar::tab {
                 padding: 8px 16px;
                 margin-right: 2px;
@@ -40,7 +41,8 @@ class ToolsTab(QWidget):
                 border: 1px solid #444;
                 top: -1px;
             }
-        """)
+        """
+        )
 
         self.m3u_tab = M3UTab(self)
         self.scummvm_tab = ScummVMGenerator(self)

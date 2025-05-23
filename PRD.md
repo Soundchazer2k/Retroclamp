@@ -1,14 +1,14 @@
 # Unified Product Requirements Document (PRD) for RetroClamp (with Batch Integration)
 
-**Version:** 2.1  
-**Date:** 2025-05-16  
+**Version:** 2.1
+**Date:** 2025-05-16
 **Author:** ChatGPT (Synthesized, with user guidance)
 
 ---
 
 ## 1. Purpose
 
-RetroClamp provides a modern, user-friendly GUI for CHDMAN-based disk image management, targeting both single-file and batch workflows.  
+RetroClamp provides a modern, user-friendly GUI for CHDMAN-based disk image management, targeting both single-file and batch workflows.
 **Goal:** Refactor backend processing to unify batch and single-file operations, maximize maintainability, and offer robust error handling and checkpointing, while keeping batch processing features (pause/resume, checkpointing, recovery, drag-and-drop) first-class.
 
 ---

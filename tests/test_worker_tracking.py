@@ -8,9 +8,10 @@ class DummyWorker:
     def stop(self):
         self.active = False
 
+
 def test_worker_start_stop():
     worker = DummyWorker()
     worker.start()
-    assert worker.active
+    assert worker.active  # nosec
     worker.stop()
-    assert not worker.active
+    assert not worker.active  # nosec

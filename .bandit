@@ -1,0 +1,5 @@
+[bandit]
+# Only report issues of medium severity or higher
+severity-level: MEDIUM
+# Optionally skip specific tests (uncomment if needed)
+# skips: B404,B112

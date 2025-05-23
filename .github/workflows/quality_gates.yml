@@ -1,0 +1,73 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [ main, dev-* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pre-commit pytest pytest-cov bandit safety
+
+    - name: Run pre-commit hooks
+      run: pre-commit run --all-files
+
+    - name: Run tests with coverage
+      run: |
+        if [ -d "tests" ] || find . -name "*test*.py" | grep -q .; then
+          pytest --cov=. --cov-report=xml --cov-report=term
+        else
+          echo "No tests found - please add unit tests"
+        fi
+
+    - name: Security checks
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+        safety check --json --output safety-report.json || true
+
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.10'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+
+    - name: Retroclamp-specific checks
+      run: |
+        # Run custom analysis if available
+        if [ -f "retroclamp_analyzer.py" ]; then
+          python retroclamp_analyzer.py . --output analysis-report.json
+        fi
+
+        # Run focused component analysis if available
+        if [ -f "focused_analysis.py" ]; then
+          python focused_analysis.py all . --output focused-report.json
+        fi
+
+    - name: Archive analysis reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: analysis-reports-${{ matrix.python-version }}
+        path: |
+          bandit-report.json
+          safety-report.json
+          analysis-report.json
+          focused-report.json

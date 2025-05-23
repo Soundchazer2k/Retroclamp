@@ -184,46 +184,46 @@ retroclamp/
 ### Compression and Extraction (REQ-001 to REQ-004)
 
 * **REQ-001**: GUI-triggered CHDMAN compression for CD/DVD/HD images
-  
+
   * Support for .cue/.bin, .iso, and raw image files
   * Configurable compression settings (algorithm, hunk size)
   * Progress indication with estimated time remaining
 
 * **REQ-002**: GUI-triggered CHDMAN extraction with optional packaging
-  
+
   * Extract CHD files back to original formats
   * Optional re-compression into standard archive formats
 
 * **REQ-003**: Pre-process compressed archives for CHD conversion
-  
+
   * Automatic extraction of .zip, .7z, and .rar archives
   * Smart detection of content type (CD, DVD, HD)
 
 * **REQ-004**: Skip extraction for raw images
-  
+
   * Direct processing of uncompressed files
 
 ### Batch Processing (REQ-005 to REQ-006)
 
 * **REQ-005**: Batch folder processing with recursive option
-  
+
   * Process entire directories of images
   * Toggle for recursive subdirectory scanning
 
 * **REQ-006**: Drag-and-drop support
-  
+
   * Accept files and folders via drag-and-drop
   * Visual feedback during drag operation
 
 ### Theming and UI (REQ-007 to REQ-008)
 
 * **REQ-007**: QSS theme loading system
-  
+
   * Load themes from config/theme.json
   * Dynamic application of themes without restart
 
 * **REQ-008**: Theme Editor tab
-  
+
   * Visual editor for theme customization
   * Real-time theme preview
   * Accessibility validation
@@ -231,31 +231,31 @@ retroclamp/
 ### Advanced Features (REQ-009 to REQ-012)
 
 * **REQ-009**: Smart CHDMAN parameter presets
-  
+
   * Optimized default settings for different media types
 
 * **REQ-010**: Custom compression profiles
-  
+
   * Save and load user-defined parameter sets
 
 * **REQ-011**: Real-time logging pane
-  
+
   * Structured logs with filtering by level
   * Log export capability
 
 * **REQ-012**: Pause/resume/cancel with checkpointing
-  
+
   * Save state for interrupted operations
   * Resume from last successful operation
 
 ### Tools and Extensions (REQ-013 to REQ-023)
 
 * **REQ-013**: Metadata viewer/editor tab
-  
+
   * View and modify CHD metadata
 
 * **REQ-014+**: Extensible tools tab with plugins
-  
+
   * SCUMMVM generator
   * PS3 wizard
   * DOS launcher
@@ -268,45 +268,45 @@ retroclamp/
 ### Performance (NFR-001 to NFR-003)
 
 * **NFR-001**: UI launch time under 2 seconds
-  
+
   * Lazy-load modules not needed at startup
   * Optimize resource loading
 
 * **NFR-002**: Heavy operations off the main thread
-  
+
   * UI CPU usage under 10% during operations
   * Responsive interface during processing
 
 * **NFR-003**: Lazy loading and caching of metadata
-  
+
   * On-demand loading of detailed information
 
 ### Usability (NFR-004 to NFR-005)
 
 * **NFR-004**: Scoped file scanning
-  
+
   * Filter by extension
   * Respect recursion settings
 
 * **NFR-005**: Robust error handling with user guidance
-  
+
   * Clear error messages
   * Suggested actions for recovery
 
 ### Maintainability (NFR-006 to NFR-008)
 
 * **NFR-006**: Persist settings in JSON format
-  
+
   * Human-readable configuration
   * Easy backup and transfer
 
 * **NFR-007**: Internationalization support
-  
+
   * RTL layout support
   * Locale-aware formatting
 
 * **NFR-008**: Lifecycle management
-  
+
   * Update checks
   * Graceful shutdown
   * Crash recovery
@@ -314,16 +314,16 @@ retroclamp/
 ### Accessibility
 
 * **A11Y-001**: WCAG-AA contrast compliance
-  
+
   * Ensure sufficient contrast ratios
   * Validate with theme_utils.py
 
 * **A11Y-002**: Keyboard navigation
-  
+
   * Full keyboard control of all features
 
 * **A11Y-003**: Screen reader compatibility
-  
+
   * Proper labels and ARIA attributes
 
 ## 7. UI/UX Design Guidelines
@@ -331,19 +331,19 @@ retroclamp/
 ### Design Principles
 
 * **Consistency**: Uniform visual elements, layout, and behavior
-  
+
   * Consistent color schemes and typography
   * Uniform placement of navigation and controls
   * Standardized interaction patterns
 
 * **Simplicity**: Focus on essential elements and clear workflows
-  
+
   * Remove unnecessary UI elements
   * Use clear labels and straightforward language
   * Implement progressive disclosure for advanced options
 
 * **Feedback**: Provide clear information about system state and user actions
-  
+
   * Visual cues for interactive elements
   * Status indicators for ongoing processes
   * Clear messaging for action results
@@ -645,7 +645,7 @@ class CHDMan:
         """
         self.executable_path = executable_path
 
-    def create_cd(self, input_file: str, output_file: str, 
+    def create_cd(self, input_file: str, output_file: str,
                   compression: Optional[str] = None,
                   hunk_size: Optional[int] = None,
                   force: bool = False,

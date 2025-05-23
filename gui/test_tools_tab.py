@@ -1,5 +1,7 @@
 import sys
+
 from PySide6.QtWidgets import QApplication, QMainWindow
+
 from .tools_tab import ToolsTab
 
 if __name__ == "__main__":

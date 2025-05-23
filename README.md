@@ -52,7 +52,7 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed version history and the [ROADM
    ```
    python main.py
    ```
-   
+
    Or use the provided batch file:
    ```
    run_retroclamp.bat
