@@ -22,8 +22,8 @@ def test_batch_add_item(processor, tmp_path):
         hunk_size=2048,
         metadata={"game": "Test Game"},
     )
-    assert len(processor.queue) == 1
-    item = processor.queue[0]
+    assert len(processor.items) == 1
+    item = processor.items[0]
     assert item.input_path == str(input_file)
     assert item.output_path == str(tmp_path / "out.chd")
     assert item.media_type == "cd"

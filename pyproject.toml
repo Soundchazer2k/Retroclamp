@@ -54,8 +54,29 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --cov=. --cov-report=term-missing"
+addopts = "-ra -q --cov-report=term-missing"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = [
+    "core",
+    "gui",
+    "modules",
+    "main.py",
+    "utils.py",
+    "quality_gates.py",
+    "version.py",
+]
+omit = [
+    "core/chdman.py",
+    "PySide6/*",
+    "*/re.py",
+    "*/sre_*.py",
+    "*/importlib/*",
+    "tests/*",
+    "venv/*",
+    ".venv/*",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]

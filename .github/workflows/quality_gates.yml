@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb libgl1 libegl1 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1
+        sudo apt-get install -y xvfb libgl1 libegl1 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 mame-tools
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pre-commit pytest pytest-cov bandit safety
@@ -35,11 +35,6 @@ jobs:
     - name: Run tests with coverage
       run: |
         export PYTHONPATH=$PYTHONPATH:.
-        # Ensure chdman.exe is executable if it exists
-        if [ -f "bin/chdman.exe" ]; then chmod +x bin/chdman.exe; fi
-        if [ -f "tools/bin/chdman.exe" ]; then chmod +x tools/bin/chdman.exe; fi # Common alternative path
-        if [ -f "retroclamp/bin/chdman.exe" ]; then chmod +x retroclamp/bin/chdman.exe; fi # Another common alternative
-
         if [ -d "tests" ] || find . -name "*test*.py" | grep -q .; then
           pytest --cov=. --cov-report=xml --cov-report=term
         else

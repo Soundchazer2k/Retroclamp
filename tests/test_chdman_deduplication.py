@@ -13,9 +13,10 @@ class TestCHDManagerDeduplication(unittest.TestCase):
             task_type=CHDTaskType.COMPRESS,
             input_file="dummy_input.iso",
             output_file="dummy_output.chd",
+            media_type="cd",
         )
-        signals1 = manager.execute_task(task)
-        signals2 = manager.execute_task(task)
+        signals1 = manager.initiate_task_and_get_signals(task)
+        signals2 = manager.initiate_task_and_get_signals(task)
         self.assertIs(signals1, signals2)
 
 
