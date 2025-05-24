@@ -612,7 +612,7 @@ sequenceDiagram
 
 ### 5. Worker Lifecycle Diagram
 
-(Placeholder for Worker Lifecycle ASCII Diagram - Please insert the diagram code here)
+
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -668,7 +668,7 @@ sequenceDiagram
 
 ### 6. Error Handling Flow (Mermaid)
 
-(Placeholder for Error Handling Flow Mermaid Diagram - Please insert the diagram code here)
+
 
 ```mermaid
 flowchart TD
@@ -707,7 +707,7 @@ flowchart TD
 
 ### 7. Batch Processing State Machine
 
-(Placeholder for Batch Processing State Machine ASCII Diagram - Please insert the diagram code here)
+
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -765,7 +765,7 @@ flowchart TD
 
 ### 8. Module Dependency Visualization
 
-(Placeholder for Module Dependency ASCII Diagram - Please insert the diagram code here)
+
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
