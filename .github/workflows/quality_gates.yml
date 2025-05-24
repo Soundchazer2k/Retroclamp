@@ -44,11 +44,9 @@ jobs:
     - name: Upload Test Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: test-artifacts
+        name: test-artifacts-${{ matrix.python-version }}
         path: |
           ./coverage.xml
-          ./bandit-report.json
-          ./safety-report.json
         retention-days: 5
 
     - name: Security checks
