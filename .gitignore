@@ -82,6 +82,15 @@ temp_scan_method.py
 create_test_dummies.py
 scan_extracted_directory.py
 manual_test.py
+fix_indentation.py
+focused_analysis.py
+retroclamp_analyzer.py
+*_backup_*.py
+*.py.fixed
+
+# --- Analysis & Security Reports ---
+analysis_report.json
+bandit_report.txt
 
 # --- Task Master/Project Management ---
 tasks.json

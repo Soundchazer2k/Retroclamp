@@ -4,10 +4,13 @@ This module provides the UI and functionality for compressing disk images
 using the CHDMAN utility.
 """
 
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QIcon
@@ -38,7 +41,6 @@ from core.file_scanner import FileScanner
 # Constants
 FILE_TABLE_COLUMNS = 3
 UI_UPDATE_INTERVAL_MS = 1000
-DEFAULT_LOG_FILENAME = "retroclamp.log"
 TEMP_EXTRACTION_DIR = "temp_extraction"
 
 # Compression profiles
@@ -119,11 +121,7 @@ class CompressionTab(QWidget):
 
     def _log_initialization(self) -> None:
         """Log initialization details."""
-        try:
-            with open(DEFAULT_LOG_FILENAME, "a", encoding="utf-8") as logf:
-                logf.write("[CompressionTab] Initialized with CHDMAN singleton.\n")
-        except Exception:
-            pass
+        logger.debug("CompressionTab initialized with CHDMAN singleton.")
 
     def _build_ui(self) -> None:
         """Build the user interface."""
@@ -504,12 +502,9 @@ class CompressionTab(QWidget):
         scrollbar = self.log_panel.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-        # Also write to log file for persistent debugging
-        try:
-            with open(DEFAULT_LOG_FILENAME, "a", encoding="utf-8") as logf:
-                logf.write(formatted + "\n")
-        except Exception:
-            pass
+        # Also route to the logging module for persistent debugging
+        log_fn = getattr(logger, level, logger.info)
+        log_fn(message)
 
     def clear_log(self) -> None:
         """Clear the log output."""

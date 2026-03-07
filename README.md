@@ -31,16 +31,10 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed version history and the [ROADM
 
 ## Installation
 
-1. Clone this repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Run the setup script: `setup_chdman.bat` (Windows) or `./setup_chdman.sh` (Linux/macOS)
-4. Copy the CHDMAN executable to the `bin` directory
-5. Run the application: `python main.py`
-
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/retroclamp.git
-   cd retroclamp
+   git clone https://github.com/Soundchazer2k/Retroclamp.git
+   cd Retroclamp
    ```
 
 2. Install dependencies:
@@ -48,12 +42,17 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed version history and the [ROADM
    pip install -r requirements.txt
    ```
 
-3. Run the application:
+3. Run the setup script to install CHDMAN (Windows):
+   ```
+   setup_chdman.bat
+   ```
+   On Linux/macOS, copy the CHDMAN executable manually to the `bin` directory.
+
+4. Run the application:
    ```
    python main.py
    ```
-
-   Or use the provided batch file:
+   Or use the provided batch file (Windows):
    ```
    run_retroclamp.bat
    ```

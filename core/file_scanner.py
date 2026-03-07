@@ -5,11 +5,13 @@ based on extensions, with support for drag-and-drop operations.
 """
 
 import fnmatch
+import logging
 import os
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import QMimeData, QObject, QRunnable, QThreadPool, Signal, Slot
 
@@ -94,25 +96,18 @@ class ScannerWorker(QRunnable):
         This method is called when the worker is started by the thread pool.
         It scans the specified directory and reports results.
         """
-        # Log all key paths and operation info to error.log (for debugging)
-        try:
-            with open("error.log", "a", encoding="utf-8") as logf:
-                logf.write(f"\n[ScannerWorker] Starting run at: {datetime.now()}\n")
-                logf.write(f"  Path: {self.path}\n")
-                logf.write(f"  Recursive: {self.recursive}\n")
-                logf.write(f"  Include extensions: {self.include_extensions}\n")
-                logf.write(f"  Exclude extensions: {self.exclude_extensions}\n")
-                logf.write(f"  Exclude patterns: {self.exclude_patterns}\n")
-        except Exception as logex:
-            print(f"[ScannerWorker] Failed to log start: {logex}")
+        logger.debug(
+            "ScannerWorker starting: path=%s recursive=%s include=%s exclude=%s patterns=%s",
+            self.path,
+            self.recursive,
+            self.include_extensions,
+            self.exclude_extensions,
+            self.exclude_patterns,
+        )
 
         try:
             if not os.path.exists(self.path):
-                with open("error.log", "a", encoding="utf-8") as logf:
-                    logf.write(
-                        f"[ScannerWorker] Path not found: {self.path} "
-                        f"at {datetime.now()}\n"
-                    )
+                logger.error("Path not found: %s", self.path)
                 self.signals.error.emit(f"Path not found: {self.path}")
                 return
 
@@ -136,11 +131,7 @@ class ScannerWorker(QRunnable):
                 # Walk the directory
                 for root, dirs, filenames in os.walk(self.path):
                     if self.cancelled:
-                        with open("error.log", "a", encoding="utf-8") as logf:
-                            logf.write(
-                                f"[ScannerWorker] Scan cancelled by user at "
-                                f"{datetime.now()}\n"
-                            )
+                        logger.debug("ScannerWorker cancelled by user")
                         self.signals.error.emit("Scan cancelled by user")
                         return
 
@@ -164,11 +155,7 @@ class ScannerWorker(QRunnable):
                     # Process files
                     for filename in filenames:
                         if self.cancelled:
-                            with open("error.log", "a", encoding="utf-8") as logf:
-                                logf.write(
-                                    f"[ScannerWorker] Scan cancelled by user "
-                                    f"at {datetime.now()}\n"
-                                )
+                            logger.debug("ScannerWorker cancelled by user")
                             self.signals.error.emit("Scan cancelled by user")
                             return
 
@@ -276,9 +263,6 @@ class DiskImageScanWorker(QRunnable):
                 return
             self.signals.started.emit(f"Scanning {self.directory}")
             disk_images = []
-            total_files = 0
-            for _root, _, files in os.walk(self.directory):
-                total_files += len(files)
             files_scanned = 0
             for _root, _, files in os.walk(self.directory):
                 for file in files:
@@ -290,16 +274,15 @@ class DiskImageScanWorker(QRunnable):
                     if ext in self.extensions:
                         disk_images.append(file_path)
                     files_scanned += 1
-                    if files_scanned % 20 == 0 or files_scanned == total_files:
+                    if files_scanned % 20 == 0:
                         self.signals.progress.emit(
                             len(disk_images), files_scanned, file_path
                         )
+            self.signals.progress.emit(len(disk_images), files_scanned, self.directory)
             self.signals.finished.emit(disk_images)
         except Exception as e:
             tb = traceback.format_exc()
-            with open("error.log", "a", encoding="utf-8") as logf:
-                logf.write(f"[DiskImageScanWorker] Error at {datetime.now()}\n")
-                logf.write(tb)
+            logger.error("DiskImageScanWorker error: %s\n%s", e, tb)
             self.signals.error.emit(f"Error during disk image scan: {str(e)}\n{tb}")
 
     def cancel(self):

@@ -46,6 +46,7 @@ from modules.theme_config import ThemeConfig
 
 # Import local modules
 from modules.ui_functions import apply_theme, load_svg_icon, resize_grips
+from version import __version__
 
 # Global settings
 SETTINGS = None
@@ -183,7 +184,6 @@ class MainWindow(QMainWindow):
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
         self.top_menu_layout.addWidget(self.btn_home)
@@ -203,7 +203,6 @@ class MainWindow(QMainWindow):
         self.btn_compress.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -225,7 +224,6 @@ class MainWindow(QMainWindow):
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
         self.top_menu_layout.addWidget(self.btn_extract)
@@ -246,7 +244,6 @@ class MainWindow(QMainWindow):
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
         self.top_menu_layout.addWidget(self.btn_tools)
@@ -266,7 +263,6 @@ class MainWindow(QMainWindow):
         self.btn_theme.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -305,7 +301,6 @@ class MainWindow(QMainWindow):
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
         self.bottom_menu_layout.addWidget(self.btn_settings)
@@ -326,7 +321,6 @@ class MainWindow(QMainWindow):
         self.toggle_button.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -506,7 +500,12 @@ class MainWindow(QMainWindow):
             lambda: self.change_page(self.extraction_page)
         )
         self.home_page.tools_clicked.connect(lambda: self.change_page(self.tools_page))
-        self.home_page.batch_clicked.connect(lambda: self.change_page(self.batch_page))
+        self.home_page.batch_clicked.connect(self._navigate_to_batch_tab)
+
+    def _navigate_to_batch_tab(self):
+        """Navigate to the Batch Processing tab inside the compression page."""
+        self.change_page(self.compression_page)
+        self.compression_page.setCurrentWidget(self.batch_tab)
 
     # def setup_tools_page(self):
     #     """Set up the tools page."""
@@ -617,8 +616,10 @@ class MainWindow(QMainWindow):
         min_width = self.collapsed_width  # Use the class variable we defined
         max_width = 240  # Match the suggested value
 
-        # Set target width based on current state
-        target_width = max_width if width == min_width else min_width
+        # Set target width based on current state.
+        # Use midpoint threshold so a mid-animation click still behaves correctly.
+        midpoint = (min_width + max_width) // 2
+        target_width = max_width if width <= midpoint else min_width
 
         # Once collapsed, remove the text; when expanded, restore it
         if target_width == min_width:
@@ -881,7 +882,7 @@ def main():
 
     # Set application properties
     app.setApplicationName("RetroClamp")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("RetroClamp")
     app.setOrganizationDomain("retroclamp.org")
 

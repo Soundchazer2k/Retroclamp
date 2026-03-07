@@ -310,4 +310,4 @@ def human_readable_size(size_bytes: int) -> str:
         size /= 1024.0
         i += 1
 
-    return f"{size_bytes:.2f} {units[i]}"
+    return f"{size:.2f} {units[i]}"
