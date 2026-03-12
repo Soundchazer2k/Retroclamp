@@ -99,6 +99,49 @@ Console detection is based on file extensions, sizes, and filename patterns. See
   - `home_tab.py`: Home screen
   - `compression_tab.py`: Compression interface
   - `extraction_tab.py`: Extraction interface
+
+## Logging
+
+RetroClamp uses a robust and configurable debug logging system via `core/debug_logger.py`:
+
+- **DebugLogger** provides contextual logging for all core modules.
+- Log level is configurable via AppSettings (key: `advanced.debug_log_level`, e.g., `DEBUG`, `INFO`).
+- All log methods accept an `extra` parameter (dict) for arbitrary contextual data.
+- Log file is written to `retroclamp_debug.log` in a platform-appropriate `logs` directory (see `get_log_file_path()` in `DebugLogger`).
+- Handler log level is explicitly set to match the logger, ensuring consistent filtering.
+
+See the top of `core/debug_logger.py` for usage examples and advanced configuration.
+
+## Archive Extraction Requirements
+
+RetroClamp supports multiple extraction methods for maximum compatibility:
+
+### Windows:
+- Install 7-Zip: https://7-zip.org/
+- `pip install py7zr libarchive-c`
+
+### Linux:
+- `sudo apt-get install p7zip-full libarchive-dev`
+- `pip install py7zr libarchive-c`
+
+### macOS:
+- `brew install p7zip libarchive`
+- `pip install py7zr libarchive-c`
+
+### Fallback Extraction Logic
+
+RetroClamp attempts extraction using the following fallback order for each supported format:
+
+1. **Pure Python library** (e.g. py7zr, zipfile, tarfile)
+2. **Native command-line tool** (e.g. 7-Zip, unrar, tar)
+3. **libarchive (via libarchive-c)**
+
+If one method fails or is unavailable, the next is tried automatically. This ensures maximum compatibility across platforms and archive types.
+
+### Dependency Check
+
+At startup, RetroClamp checks for the availability of extraction dependencies and logs a warning if any are missing. See `core/archive.py` for details.
+
   - `theme_tab.py`: Theme customization
   - `settings_tab.py`: Application settings
 - `modules/`: Shared modules

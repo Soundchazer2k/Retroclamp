@@ -6,7 +6,10 @@ allowing for process resumption after interruptions.
 """
 
 import json
-import logging
+
+from core.debug_logger import DebugLogger
+
+debug_logger = DebugLogger()
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
@@ -31,7 +34,6 @@ class CheckpointManager:
 
         self.checkpoint_dir = checkpoint_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.logger = logging.getLogger(__name__)
 
     def create_checkpoint(
         self,
@@ -66,10 +68,14 @@ class CheckpointManager:
         try:
             with open(checkpoint_file, "w", encoding="utf-8") as f:
                 json.dump(checkpoint, f, indent=2)
-            self.logger.info(f"Created checkpoint: {checkpoint_file}")
+            debug_logger.info(
+                "core.checkpoint_manager", f"Created checkpoint: {checkpoint_file}"
+            )
             return checkpoint_file
         except Exception as e:
-            self.logger.error(f"Failed to create checkpoint: {e}")
+            debug_logger.error(
+                "core.checkpoint_manager", f"Failed to create checkpoint: {e}"
+            )
             raise
 
     def load_checkpoint(self, checkpoint_path: str) -> Dict[str, Any]:
@@ -103,7 +109,9 @@ class CheckpointManager:
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid checkpoint file: {e}") from e
         except Exception as e:
-            self.logger.error(f"Error loading checkpoint: {e}")
+            debug_logger.error(
+                "core.checkpoint_manager", f"Error loading checkpoint: {e}"
+            )
             raise
 
     def get_latest_checkpoint(self, batch_id: Optional[str] = None) -> Optional[str]:
@@ -139,7 +147,9 @@ class CheckpointManager:
             return checkpoints[0][1]
 
         except Exception as e:
-            self.logger.error(f"Error finding checkpoints: {e}")
+            debug_logger.error(
+                "core.checkpoint_manager", f"Error finding checkpoints: {e}"
+            )
             return None
 
     def list_checkpoints(self) -> List[Dict[str, Any]]:
@@ -180,14 +190,19 @@ class CheckpointManager:
                     )
 
                 except (json.JSONDecodeError, KeyError, OSError) as e:
-                    self.logger.warning(f"Skipping invalid checkpoint {f}: {e}")
+                    debug_logger.warning(
+                        "core.checkpoint_manager",
+                        f"Skipping invalid checkpoint {f}: {e}",
+                    )
                     continue
 
             # Sort by modification time, newest first
             checkpoints.sort(key=lambda x: x["modified"], reverse=True)
 
         except OSError as e:
-            self.logger.error(f"Error listing checkpoints: {e}")
+            debug_logger.error(
+                "core.checkpoint_manager", f"Error listing checkpoints: {e}"
+            )
 
         return checkpoints
 
@@ -215,12 +230,16 @@ class CheckpointManager:
                     if (now - mtime) > max_age_seconds:
                         os.remove(path)
                         removed += 1
-                        self.logger.debug(f"Removed old checkpoint: {path}")
+                        debug_logger.debug(
+                            "core.checkpoint_manager", f"Removed old checkpoint: {path}"
+                        )
                 except (OSError, ValueError):
                     continue
 
             return removed
 
         except Exception as e:
-            self.logger.error(f"Error cleaning up checkpoints: {e}")
+            debug_logger.error(
+                "core.checkpoint_manager", f"Error cleaning up checkpoints: {e}"
+            )
             return removed

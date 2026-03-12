@@ -106,3 +106,23 @@ tasks/
 
 # Reference code
 pydracula_reference/
+
+# Specific backup files
+*.bak2
+core/archive.bak2
+
+# Tooling / Helper scripts not part of the main project
+cascade_linter.py
+format_code_enhanced.py
+
+# Other generated/temporary files
+exa
+review
+
+# Specific log/output files
+retroclamp_full_log.txt
+retroclamp_log_20250524_075533.txt
+ruff_output.txt
+
+# Ignore the RetroClamp test suite for now
+tests/core/retroclamp_test_suite.py

@@ -7,15 +7,18 @@ operations on CHD files with proper progress reporting and error handling.
 
 import functools
 import logging
+
+from core.debug_logger import DebugLogger, get_logger
+
+debug_logger = DebugLogger()
 import os
-import queue
 import re
 import shutil
+import subprocess  # Added import
 
 # Bandit note: All subprocess usage in this module is controlled.
 # No untrusted input is used.
-import subprocess
-import threading  # Ensure threading is imported for locks
+import threading
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -26,10 +29,10 @@ from PySide6.QtCore import (
     QMutex,
     QMutexLocker,
     QObject,
+    QProcess,  # Ensure QProcess is listed here
     QRunnable,
     QThreadPool,
     Signal,
-    Slot,
 )
 
 from modules.settings import load_chdman_path
@@ -131,6 +134,7 @@ class CHDManWorker(QRunnable):
         hunk_size: Optional[int] = None,
         force: bool = False,
         verbose: bool = True,
+        app_settings: Any = None,
         worker_id: Optional[str] = None,
         **kwargs,
     ):
@@ -144,18 +148,27 @@ class CHDManWorker(QRunnable):
         self.hunk_size = hunk_size
         self.force = force
         self.verbose = verbose
+        self.app_settings = app_settings
         self.kwargs = kwargs
         self.worker_id = worker_id or str(id(self))
 
         self.signals = CHDManSignals()
-        self.process: Optional[subprocess.Popen] = None
+        self.process: Optional[QProcess] = None
         self.cancelled = False
-        self.logger = logging.getLogger(__name__ + ".CHDManWorker")
+        # Use DebugLogger for consistent logging
+        # self.logger = logging.getLogger(__name__ + ".CHDManWorker")
 
-        self.logger.info(
-            f"__init__ for worker {self.worker_id}: command={self.command}, "
-            f"input={self.input_file}, output={self.output_file}"
+        logger = (
+            get_logger(self.app_settings, module_name="CHDManWorker")
+            if self.app_settings
+            else debug_logger
         )
+        if logger:
+            logger.info(
+                "core.chdmanworker",
+                f"__init__ for worker {self.worker_id}: command={self.command}, "
+                f"input={self.input_file}, output={self.output_file}",
+            )
 
     @staticmethod
     def _sanitize_compression_algorithms(
@@ -166,9 +179,7 @@ class CHDManWorker(QRunnable):
             return None
 
         processed_algorithms = []
-        static_logger = logging.getLogger(
-            __name__ + ".CHDManWorker._sanitize_compression_algorithms"
-        )
+        # Use debug_logger for static method warnings
 
         for algo_name_iter in compression_input.split(","):
             original_algo_name = algo_name_iter.strip()
@@ -176,10 +187,17 @@ class CHDManWorker(QRunnable):
 
             if algo_name in CHDManWorker.COMPRESSION_CORRECTIONS:
                 corrected_name = CHDManWorker.COMPRESSION_CORRECTIONS[algo_name]
-                static_logger.warning(
-                    f"Correcting compression algorithm '{original_algo_name}' to "
-                    f"'{corrected_name}'."
+                logger = (
+                    get_logger(None, module_name="CHDManWorker")
+                    if None
+                    else debug_logger
                 )
+                if logger:
+                    logger.warning(
+                        "core.chdmanworker",
+                        f"Correcting compression algorithm '{original_algo_name}' to '",
+                        f"{corrected_name}'.",
+                    )
                 algo_name = corrected_name
 
             if algo_name not in CHDManWorker.VALID_COMPRESSION_ALGORITHMS:
@@ -193,7 +211,16 @@ class CHDManWorker(QRunnable):
         return ",".join(processed_algorithms)
 
     def _perform_pre_flight_checks(self) -> None:
-        self.logger.debug(f"Worker {self.worker_id}: Performing pre-flight checks...")
+        logger = (
+            get_logger(self.app_settings, module_name="CHDManWorker")
+            if self.app_settings
+            else debug_logger
+        )
+        if logger:
+            logger.debug(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: Performing pre-flight checks...",
+            )
         # 1. CHDMAN executable
         if shutil.which(self.executable_path) is None:
             raise CHDManExecutableNotFoundError(
@@ -220,9 +247,11 @@ class CHDManWorker(QRunnable):
         }
         ext = self.input_file.suffix.lower()
         if ext and ext not in valid_exts:
-            self.logger.warning(
-                f"Input file extension '{ext}' is not a common disk image type."
-            )
+            if logger:
+                logger.warning(
+                    "core.chdmanworker",
+                    f"Input file extension '{ext}' is not a common disk image type.",
+                )
 
         # 3. Output file and directory
         if self.output_file:
@@ -258,10 +287,12 @@ class CHDManWorker(QRunnable):
                 if self.force:
                     try:
                         self.output_file.unlink()
-                        self.logger.info(
-                            f"Worker {self.worker_id}: Removed existing output: "
-                            f"{self.output_file} (force)."
-                        )
+                        if logger:
+                            logger.info(
+                                "core.chdmanworker",
+                                f"Worker {self.worker_id}: Removed existing output: "
+                                f"{self.output_file} (force).",
+                            )
                     except (OSError, PermissionError) as e:
                         raise CHDManOutputFileError(
                             f"Cannot remove existing output file: {self.output_file}. "
@@ -286,10 +317,23 @@ class CHDManWorker(QRunnable):
         for key, value in self.kwargs.items():
             if isinstance(value, str) and not value.strip():
                 raise CHDManError(f"Parameter '{key}' is an empty string.")
-        self.logger.debug(f"Worker {self.worker_id}: Pre-flight checks passed.")
+        if logger:
+            logger.debug(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: Pre-flight checks passed.",
+            )
 
     def _build_chdman_command(self) -> List[str]:
-        self.logger.debug(f"Worker {self.worker_id}: Building CHDMAN command...")
+        logger = (
+            get_logger(self.app_settings, module_name="CHDManWorker")
+            if self.app_settings
+            else debug_logger
+        )
+        if logger:
+            logger.debug(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: Building CHDMAN command...",
+            )
         cmd: List[str] = [
             self.executable_path,
             self.command,
@@ -306,15 +350,19 @@ class CHDManWorker(QRunnable):
                 )
                 if validated_compression_str:
                     cmd.extend(["-c", validated_compression_str])
-                    self.logger.info(
-                        f"Worker {self.worker_id}: Using sanitized compression "
-                        f"algorithms: {validated_compression_str}"
-                    )
+                    if logger:
+                        logger.info(
+                            "core.chdmanworker",
+                            f"Worker {self.worker_id}: Using sanitized compression "
+                            f"algorithms: {validated_compression_str}",
+                        )
             except ValueError as e:
-                self.logger.error(
-                    f"Worker {self.worker_id}: Compression algorithm validation "
-                    f"failed: {e}"
-                )
+                if logger:
+                    logger.error(
+                        "core.chdmanworker",
+                        f"Worker {self.worker_id}: Compression algorithm validation "
+                        f"failed: {e}",
+                    )
                 raise CHDManError(
                     f"Compression algorithm validation failed: {e}"
                 ) from e
@@ -332,370 +380,15 @@ class CHDManWorker(QRunnable):
         cmd_str_for_log = " ".join(
             [str(f'"{arg}"' if " " in str(arg) else str(arg)) for arg in cmd]
         )
-        self.logger.debug(
-            f"Worker {self.worker_id}: CHDMAN command built: {cmd_str_for_log}"
-        )
+        print(
+            f"DEBUG: CHDMAN command built: {cmd_str_for_log}"
+        )  # Temporary debug print
+        if logger:
+            logger.debug(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: CHDMAN command built: {cmd_str_for_log}",
+            )
         return cmd
-
-    def _execute_and_monitor_process(self, cmd: List[str]) -> Tuple[int, List[str]]:
-        cmd_str_for_logging = " ".join(
-            [f'"{arg}"' if " " in arg else arg for arg in cmd]
-        )
-        self.logger.debug(
-            f"Worker {self.worker_id}: === CHDMAN DETAILED INFORMATION ==="
-        )
-        self.logger.debug(f"Worker {self.worker_id}: Command: {cmd_str_for_logging}")
-        self.logger.debug(
-            f"Worker {self.worker_id}: Executable: {self.executable_path}"
-        )
-        self.logger.debug(
-            f"Worker {self.worker_id}: =================================="
-        )
-        self.logger.info(
-            f"Worker {self.worker_id}: CHDMAN COMMAND: {cmd_str_for_logging}"
-        )
-
-        all_output: List[str] = []
-        try:
-            self.logger.info(
-                f"Worker {self.worker_id}: Launching subprocess with command: "
-                f"{cmd_str_for_logging}"
-            )
-            self.logger.debug(
-                f"Worker {self.worker_id}: Input file: {self.input_file}, "
-                f"Output file: {self.output_file}, "
-                f"Compression: {self.compression}, "
-                f"Hunk size: {self.hunk_size}, "
-                f"Force: {self.force}, "
-                f"Kwargs: {self.kwargs}"
-            )
-            # Bandit note: cmd is not constructed from untrusted input. Usage is safe.
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
-            self.logger.info(
-                f"Worker {self.worker_id}: CHDMAN process started with PID: "
-                f"{self.process.pid}"
-            )
-        except Exception:
-            self.logger.error(
-                f"Worker {self.worker_id}: Failed to start subprocess for command: "
-                f"{cmd_str_for_logging}",
-                exc_info=True,
-            )
-            self.logger.debug(
-                f"Worker {self.worker_id}: Input file: {self.input_file}, "
-                f"Output file: {self.output_file}, "
-                f"Compression: {self.compression}, "
-                f"Hunk size: {self.hunk_size}, "
-                f"Force: {self.force}, "
-                f"Kwargs: {self.kwargs}"
-            )
-            raise
-        self.signals.progress.emit(
-            0.0, f"Started CHDMAN process (PID: {self.process.pid})"
-        )
-        stdout_queue: queue.Queue[Optional[str]] = queue.Queue()
-        stderr_queue: queue.Queue[Optional[str]] = queue.Queue()
-        last_progress_time = time.time()
-        last_progress_value = 0.0
-
-        def read_stream_local(
-            stream,
-            output_queue: queue.Queue[Optional[str]],
-            worker_self: CHDManWorker,
-            stream_name: str,
-        ):
-            try:
-                for line_bytes in iter(
-                    stream.readline,
-                    b"" if hasattr(stream, "mode") and "b" in stream.mode else "",
-                ):
-                    if line_bytes:
-                        try:
-                            line_str = (
-                                line_bytes.decode("utf-8", errors="replace").strip()
-                                if isinstance(line_bytes, bytes)
-                                else str(line_bytes).strip()
-                            )
-                            if line_str:
-                                output_queue.put(line_str)
-                                # Log each line as soon as it is read
-                                if stream_name == "stdout":
-                                    worker_self.logger.debug(
-                                        f"Worker {worker_self.worker_id}: "
-                                        f"[STDOUT] {line_str}"
-                                    )
-                                else:
-                                    worker_self.logger.debug(
-                                        f"Worker {worker_self.worker_id}: "
-                                        f"[STDERR] {line_str}"
-                                    )
-                        except Exception as e:
-                            worker_self.logger.error(
-                                f"Error processing line: {line_bytes!r} - {e}",
-                                exc_info=True,
-                            )
-                            try:
-                                output_queue.put(str(line_bytes))
-                            except Exception as e:
-                                self.logger.exception(
-                                    "Error converting line_bytes to string"
-                                )  # Was: pass  # Should not fail with str()
-            except Exception as e:
-                worker_self.logger.error(
-                    f"Error reading from {stream_name}: {e}", exc_info=True
-                )
-            finally:
-                output_queue.put(None)
-
-        stdout_thread = threading.Thread(
-            target=read_stream_local,
-            args=(self.process.stdout, stdout_queue, self, "stdout"),
-        )
-        stderr_thread = threading.Thread(
-            target=read_stream_local,
-            args=(self.process.stderr, stderr_queue, self, "stderr"),
-        )
-        stdout_thread.daemon = True  # Corrected: daemon assignment on separate lines
-        stderr_thread.daemon = True
-        stdout_thread.start()
-        stderr_thread.start()  # Corrected: start calls on separate lines
-
-        stdout_done, stderr_done = False, False
-        progress_percent = 0.0
-        progress_start_time = time.time()
-
-        last_progress_percent = 0.0
-        eta_seconds = None
-        while self.process.poll() is None or not (stdout_done and stderr_done):
-            if self.cancelled:
-                self.logger.info(
-                    f"Worker {self.worker_id}: Cancellation for PID "
-                    f"{self.process.pid}, terminating..."
-                )
-                try:
-                    self.process.terminate()
-                    time.sleep(0.1)
-                    Popen_poll = self.process.poll()
-                    if Popen_poll is None:
-                        time.sleep(0.4)
-                        Popen_poll = self.process.poll()
-                    if Popen_poll is None:
-                        self.process.kill()
-                except Exception as e:
-                    self.logger.error(
-                        f"Worker {self.worker_id}: Error terminating: {e}",
-                        exc_info=True,
-                    )
-                self.signals.error.emit("Operation cancelled by user")
-                stdout_thread.join(timeout=1.0)
-                stderr_thread.join(timeout=1.0)
-                return -1, all_output
-            try:
-                line = stdout_queue.get(block=True, timeout=0.05)
-                if line is None:
-                    stdout_done = True
-                    continue
-                all_output.append(line)
-                # Enhanced progress parsing
-                # Typical CHDMAN progress: 'Progress:  23% (12345/54321)'
-                if line.startswith("Progress:"):
-                    import re
-
-                    match = re.search(r"Progress:\s+(\d+)%", line)
-                    if match:
-                        progress_percent = float(match.group(1))
-                        now = time.time()
-                        # Estimate ETA if progress is advancing
-                        if progress_percent > last_progress_percent:
-                            elapsed = now - progress_start_time
-                            if progress_percent > 0:
-                                total_est = elapsed / (progress_percent / 100.0)
-                                eta_seconds = max(0, total_est - elapsed)
-                            else:
-                                eta_seconds = None
-                            last_progress_percent = progress_percent
-                        eta_str = (
-                            f" | ETA: {int(eta_seconds)}s"
-                            if eta_seconds is not None
-                            else ""
-                        )
-                        msg = f"{progress_percent:.1f}% complete{eta_str}"
-                        self.signals.progress.emit(progress_percent, msg)
-            except queue.Empty:
-                pass
-            try:
-                line = stderr_queue.get(block=True, timeout=0.05)
-                if line is None:
-                    stderr_done = True
-                else:
-                    all_output.append(line)
-                    if "Compressing" in line or "complete" in line or "ratio=" in line:
-                        self.signals.progress.emit(-1.0, line)
-                    else:
-                        self.signals.progress.emit(-1.0, f"ERROR: {line}")
-                    self.logger.debug(f"Worker {self.worker_id}: STDERR: {line}")
-            except queue.Empty:
-                pass
-            if time.time() - last_progress_time > 2 and not self.cancelled:
-                self.signals.progress.emit(
-                    last_progress_value, "Processing... (still working)"
-                )
-                last_progress_time = time.time()
-        stdout_thread.join(timeout=1.0)
-        stderr_thread.join(timeout=1.0)
-        try:
-            while True:
-                line = stdout_queue.get_nowait()
-                if line is None:
-                    break
-                all_output.append(line)
-                progress = self._parse_progress(line)
-                self.signals.progress.emit(
-                    progress if progress is not None else -1.0, line
-                )
-                if not line.startswith("Processing:"):
-                    self.logger.debug(f"Worker {self.worker_id}: FINAL STDOUT: {line}")
-        except queue.Empty:
-            pass
-        except Exception as e:
-            self.logger.error(
-                f"Worker {self.worker_id}: Error draining stdout: {e}", exc_info=True
-            )
-        # Log all stdout lines at the end if the process failed
-        if self.process.returncode not in (0, None):
-            self.logger.error(
-                f"Worker {self.worker_id}: Full STDOUT output on failure:\n"
-                + "\n".join([line for line in all_output if line])
-            )
-        try:
-            while True:
-                line = stderr_queue.get_nowait()
-                if line is None:
-                    break
-                all_output.append(line)
-                self.signals.progress.emit(-1.0, f"ERROR: {line}")
-                self.logger.debug(f"Worker {self.worker_id}: FINAL STDERR: {line}")
-        except queue.Empty:
-            pass
-        except Exception as e:
-            self.logger.error(
-                f"Worker {self.worker_id}: Error draining stderr: {e}", exc_info=True
-            )
-        # Log all stderr lines at the end if the process failed
-        if self.process.returncode not in (0, None):
-            self.logger.error(
-                f"Worker {self.worker_id}: Full STDERR output on failure:\n"
-                + "\n".join(
-                    [line for line in all_output if line and line.startswith("ERROR:")]
-                )
-            )
-        return_code = self.process.wait()
-        self.logger.info(
-            f"Worker {self.worker_id}: Process PID {self.process.pid} "
-            f"completed with return code: {return_code}"
-        )
-        all_output_str: List[str] = [str(line) for line in all_output]
-        return return_code, all_output_str
-
-    def _handle_process_completion(
-        self, return_code: int, all_output: List[str], cmd_str: str
-    ) -> None:
-        if return_code == -1 and self.cancelled:
-            self.logger.info(
-                f"Worker {self.worker_id}: Cancelled during execution. "
-                f"Error signal emitted from monitor."
-            )
-            return
-        if self.cancelled:
-            self.logger.info(
-                f"Worker {self.worker_id}: Completion aborted (cancelled). "
-                f"Emitting error."
-            )
-            if not self.signals.error.isBlocked():
-                self.signals.error.emit("Operation cancelled by user")
-            return
-        output_str = "\n".join(filter(None, all_output))
-        is_usage_message = "Usage:" in output_str
-        is_non_error_rc1 = (
-            return_code == 1
-            and is_usage_message
-            and not any(
-                kw in output_str.lower() for kw in ["error:", "failed", "cannot open"]
-            )
-        )
-        if return_code == 0 or is_non_error_rc1:
-            self.logger.info(f"Worker {self.worker_id}: Success for '{cmd_str}'.")
-            self.signals.finished.emit(True, "Operation completed successfully")
-        else:
-            error_message = f"CHDMAN command '{cmd_str}' failed (code {return_code})"
-            if output_str:
-                error_message += f":\n{output_str}"
-            if (
-                "Permission denied" in output_str
-                or "Access is denied" in output_str.lower()
-            ):
-                if self.output_file:
-                    error_message += (
-                        "\n\nPermission error: Write to "
-                        f"{os.path.dirname(self.output_file)} denied."
-                    )
-            elif (
-                "No such file or directory" in output_str
-                or "cannot open" in output_str.lower()
-            ):
-                error_message += "\n\nInput file error: File not found or inaccessible."
-            self.logger.error(f"Worker {self.worker_id}: {error_message}")
-            self.signals.error.emit(error_message)
-            raise CHDManCommandError(cmd_str, return_code, output_str)
-
-    @Slot()
-    def run(self):
-        if getattr(self, "_has_run", False):
-            self.logger.debug(f"Worker {self.worker_id}: Already ran. Skipping.")
-            return
-        self._has_run = True
-        cmd_list: List[str] = []
-        cmd_str_for_signal_and_error: str = ""
-        try:
-            self.logger.info(
-                f"Worker {self.worker_id}: Starting: {self.command} on "
-                f"{self.input_file}"
-            )
-            self._perform_pre_flight_checks()
-            cmd_list = self._build_chdman_command()
-            cmd_str_for_signal_and_error = " ".join(
-                [f'"{arg}"' if " " in arg else arg for arg in cmd_list]
-            )
-            self.signals.started.emit(f"Running: {cmd_str_for_signal_and_error}")
-            # Use QProcess for async execution
-            self._execute_with_qprocess(cmd_list, cmd_str_for_signal_and_error)
-        except CHDManError as e:
-            self.logger.error(
-                f"Worker {self.worker_id}: CHDManError for "
-                f"'{cmd_str_for_signal_and_error}': {e}",
-                exc_info=True,
-            )
-            if not self.signals.error.isBlocked():
-                self.signals.error.emit(str(e))
-        except Exception as e:
-            self.logger.exception(
-                f"Worker {self.worker_id}: Unexpected error for "
-                f"'{cmd_str_for_signal_and_error}'"
-            )
-            if not self.signals.error.isBlocked():
-                self.signals.error.emit(f"Unexpected error: {str(e)}")
-        finally:
-            self.logger.info(
-                f"Worker {self.worker_id}: Finished: {self.command} on "
-                f"{self.input_file}"
-            )
 
     def _execute_with_qprocess(
         self, cmd_list: List[str], cmd_str_for_signal_and_error: str
@@ -719,10 +412,13 @@ class CHDManWorker(QRunnable):
                 )
                 self._all_output.append(line)
                 if line.startswith("Progress:"):
+                    import re
+
                     match = re.search(r"Progress:\s+(\d+)%", line)
                     if match:
                         self._progress_percent = float(match.group(1))
                         now = time.time()
+                        # Estimate ETA if progress is advancing
                         if self._progress_percent > self._last_progress_percent:
                             elapsed = now - self._progress_start_time
                             if self._progress_percent > 0:
@@ -748,15 +444,52 @@ class CHDManWorker(QRunnable):
                 )
                 self._all_output.append(line)
                 self.signals.progress.emit(-1.0, f"ERROR: {line}")
-                self.logger.debug(f"Worker {self.worker_id}: STDERR: {line}")
+                logger = (
+                    get_logger(self.app_settings, module_name="CHDManWorker")
+                    if self.app_settings
+                    else debug_logger
+                )
+                if logger:
+                    logger.debug(
+                        "core.chdmanworker", f"Worker {self.worker_id}: STDERR: {line}"
+                    )
 
         def handle_finished(exit_code, exit_status):
+            logger = (
+                get_logger(self.app_settings, module_name="CHDManWorker")
+                if self.app_settings
+                else debug_logger
+            )
             output_str = "\n".join(filter(None, self._all_output))
-            if exit_code == 0:
-                self.logger.info(
-                    f"Worker {self.worker_id}: Success for "
-                    f"'{cmd_str_for_signal_and_error}'."
+
+            if self.cancelled:
+                if logger:
+                    logger.info(
+                        "core.chdmanworker",
+                        f"Worker {self.worker_id}: Operation was cancelled. Emitting error.",
+                    )
+                if not self.signals.error.isBlocked():
+                    self.signals.error.emit("Operation cancelled by user")
+                return
+
+            # Logic from _handle_process_completion
+            is_usage_message = "Usage:" in output_str
+            is_non_error_rc1 = (
+                exit_code == 1
+                and is_usage_message
+                and not any(
+                    kw in output_str.lower()
+                    for kw in ["error:", "failed", "cannot open"]
                 )
+            )
+
+            if exit_code == 0 or is_non_error_rc1:
+                if logger:
+                    logger.info(
+                        "core.chdmanworker",
+                        f"Worker {self.worker_id}: Success for "
+                        f"'{cmd_str_for_signal_and_error}'.",
+                    )
                 self.signals.progress.emit(100.0, "Operation completed successfully")
                 self.signals.finished.emit(True, "Operation completed successfully")
             else:
@@ -766,8 +499,31 @@ class CHDManWorker(QRunnable):
                 )
                 if output_str:
                     error_message += f":\n{output_str}"
-                self.logger.error(f"Worker {self.worker_id}: {error_message}")
-                self.signals.error.emit(error_message)
+
+                # Specific error details from _handle_process_completion
+                if (
+                    "Permission denied" in output_str
+                    or "Access is denied" in output_str.lower()
+                ):
+                    if self.output_file:
+                        error_message += (
+                            "\n\nPermission error: Write to "
+                            f"{os.path.dirname(self.output_file)} denied."
+                        )
+                elif (
+                    "No such file or directory" in output_str
+                    or "cannot open" in output_str.lower()
+                ):
+                    error_message += (
+                        "\n\nInput file error: File not found or inaccessible."
+                    )
+
+                if logger:
+                    logger.error(
+                        "core.chdmanworker", f"Worker {self.worker_id}: {error_message}"
+                    )
+                if not self.signals.error.isBlocked():
+                    self.signals.error.emit(error_message)
 
         # Check for None before connecting signals
         # Only connect signals if self.process is a QProcess (not Popen)
@@ -783,15 +539,50 @@ class CHDManWorker(QRunnable):
 
     def cancel(self):
         self.cancelled = True
-        self.logger.info(
-            f"Worker {self.worker_id}: Marked for cancellation: "
-            f"{self.command} on {self.input_file}."
+        logger = (
+            get_logger(self.app_settings, module_name="CHDManWorker")
+            if self.app_settings
+            else debug_logger
         )
+        if logger:
+            logger.info(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: Marked for cancellation: "
+                f"{self.command} on {self.input_file}.",
+            )
+        # Terminate QProcess if it's running
+        if (
+            self.process
+            and isinstance(self.process, QProcess)
+            and self.process.state() != QProcess.ProcessState.NotRunning
+        ):
+            if logger:
+                logger.info(
+                    "core.chdmanworker",
+                    f"Worker {self.worker_id}: Terminating QProcess PID {self.process.processId()}",
+                )
+            self.process.terminate()
+            # Optionally, wait for a bit and then kill if still running
+            # if not self.process.waitForFinished(1000): # 1 second timeout
+            #     logger.warning(
+            #         "core.chdmanworker",
+            #         f"Worker {self.worker_id}: QProcess did not terminate, killing."
+            #     )
+            #     self.process.kill()
 
     def _parse_progress(self, line: str) -> Optional[float]:
         if not line or not line.strip():
             return None
-        self.logger.debug(f"Worker {self.worker_id}: Parsing progress: {line}")
+        logger = (
+            get_logger(self.app_settings, module_name="CHDManWorker")
+            if self.app_settings
+            else debug_logger
+        )
+        if logger:
+            logger.debug(
+                "core.chdmanworker",
+                f"Worker {self.worker_id}: Parsing progress: {line}",
+            )
         match = re.search(r"(\d+(\.\d+)?)% complete", line)
         if match:
             return float(match.group(1))
@@ -852,8 +643,20 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         "verify": CHDManCommand("verify", "Verify CHD integrity", True, False, False),
     }
 
-    def __init__(self, executable_path: Optional[str] = None, verbose: bool = False):
+    def __init__(
+        self,
+        executable_path: Optional[str] = None,
+        verbose: bool = False,
+        app_settings: Any = None,
+    ):
         super().__init__()
+        self.app_settings = app_settings
+        self.logger = (
+            get_logger(self.app_settings, module_name="CHDMan")
+            if self.app_settings
+            else None
+        )
+
         if executable_path is None or executable_path.strip() == "":
             persisted_path = load_chdman_path()
             self.executable_path = persisted_path if persisted_path else "chdman"
@@ -863,11 +666,20 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         self.thread_pool = QThreadPool()
         self.active_workers: Dict[str, CHDManWorker] = {}  # Should be managed by CHDMan
         self._workers_lock = threading.Lock()
-        self.logger = logging.getLogger(__name__ + ".CHDMan")
-        self.logger.info(
-            f"Initialized with executable_path: {self.executable_path}, "
-            f"verbose: {self.verbose}"
-        )
+        # Use DebugLogger for consistent logging
+        # self.logger = logging.getLogger(__name__ + ".CHDMan")
+        if self.logger:
+            self.logger.info(
+                "core.chdman",
+                f"Initialized with executable_path: {self.executable_path}, "
+                f"verbose: {self.verbose}",
+            )
+        else:
+            debug_logger.info(
+                "core.chdman",
+                f"Initialized with executable_path: {self.executable_path}, "
+                f"verbose: {self.verbose}",
+            )
 
     def _create_and_start_worker(
         self,
@@ -878,7 +690,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         hunk_size: Optional[int] = None,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         # Construct a unique ID for the worker to prevent duplicates.
         # The suffix helps differentiate if the same core task is called
         # with slight variations or for specific tracking purposes.
@@ -894,10 +706,13 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
 
         with self._workers_lock:
             if worker_id in self.active_workers:
-                self.logger.info(
-                    f"Reusing existing worker {worker_id} for command: {command}"
+                debug_logger.info(
+                    "core.chdmanworker",
+                    f"Reusing existing worker {worker_id} for command: {command}",
                 )
-                return self.active_workers[worker_id].signals
+                return self.active_workers[worker_id].signals, self.active_workers[
+                    worker_id
+                ]
 
             worker = CHDManWorker(
                 executable_path=self.executable_path,
@@ -908,7 +723,8 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
                 hunk_size=hunk_size,
                 force=force,
                 verbose=self.verbose,
-                worker_id=worker_id,  # Pass the generated worker_id
+                app_settings=self.app_settings,
+                worker_id=worker_id,
             )
 
             # Connect signals using functools.partial to pass worker_id
@@ -924,41 +740,53 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
 
             self.active_workers[worker_id] = worker
             self.thread_pool.start(worker)
-            self.logger.info(f"Started new worker {worker_id} for command: {command}")
-            return worker.signals
+            debug_logger.info(
+                "core.chdmanworker",
+                f"Started new worker {worker_id} for command: {command}",
+            )
+            return worker.signals, worker
 
     # Add new private slots for worker signals here, before other private methods
     def _on_worker_finished(self, success: bool, msg: str, worker_id: str):
         """Slot to handle worker finished signal, removing the worker."""
         # success and msg are parameters from the finished signal, can be used if needed
-        self.logger.debug(
-            f"CHDMan: Worker {worker_id} finished. Success: {success}, Msg: {msg}"
+        debug_logger.debug(
+            "core.chdmanworker",
+            f"CHDMan: Worker {worker_id} finished. Success: {success}, Msg: {msg}",
         )
         self._remove_worker_by_id(worker_id)
 
     def _on_worker_error(self, error_msg: str, worker_id: str):
         """Slot to handle worker error signal."""
-        self.logger.error(f"CHDMan: Worker {worker_id} reported an error: {error_msg}")
+        debug_logger.error(
+            "core.chdmanworker",
+            f"CHDMan: Worker {worker_id} reported an error: {error_msg}",
+        )
         self._handle_worker_error(worker_id, error_msg)
 
     def _remove_worker_by_id(self, worker_id: str):
         with self._workers_lock:  # Use the lock here
             if worker_id in self.active_workers:
                 del self.active_workers[worker_id]
-                self.logger.info(f"Removed worker {worker_id} from active list.")
+                debug_logger.info(
+                    "core.chdmanworker", f"Removed worker {worker_id} from active list."
+                )
             else:
-                self.logger.warning(
-                    f"Attempted to remove non-existent worker_id: {worker_id}"
+                debug_logger.warning(
+                    "core.chdmanworker",
+                    f"Attempted to remove non-existent worker_id: {worker_id}",
                 )
 
     def _handle_worker_error(self, worker_id: str, error_message: str):
-        self.logger.error(f"Worker {worker_id}: {error_message}")
+        debug_logger.error("core.chdmanworker", f"Worker {worker_id}: {error_message}")
         self.signals.error.emit(error_message)
 
     def terminate_all_chdman_processes(self):
         with self._workers_lock:
             for worker_id, worker in list(self.active_workers.items()):  # Iterate copy
-                self.logger.info(f"Terminating worker {worker_id}")
+                debug_logger.info(
+                    "core.chdmanworker", f"Terminating worker {worker_id}"
+                )
                 if worker.process and worker.process.poll() is None:
                     try:
                         worker.process.terminate()
@@ -966,7 +794,10 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
                     except subprocess.TimeoutExpired:
                         worker.process.kill()  # Force kill if terminate fails
                     except Exception as e:
-                        self.logger.error(f"Error terminating worker {worker_id}: {e}")
+                        debug_logger.error(
+                            "core.chdmanworker",
+                            f"Error terminating worker {worker_id}: {e}",
+                        )
                 self._remove_worker_by_id(worker_id)  # Ensure worker is removed
 
     def cleanup(self):
@@ -981,7 +812,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         hunk_size: Optional[int] = None,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "createcd",
             input_file,
@@ -1000,7 +831,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         hunk_size: Optional[int] = None,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "createdvd",
             input_file,
@@ -1020,7 +851,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         force: bool = False,
         input_size: Optional[int] = None,  # Specific to createhd
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         kwargs = {}
         if input_size is not None:
             kwargs["inputbytes"] = input_size  # CHDMAN uses --inputbytes
@@ -1043,7 +874,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         hunk_size: Optional[int] = None,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "createld",
             input_file,
@@ -1060,7 +891,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         output_file: str,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "extractcd",
             input_file,
@@ -1075,7 +906,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         output_file: str,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "extractdvd",
             input_file,
@@ -1090,7 +921,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         output_file: str,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "extracthd",
             input_file,
@@ -1105,7 +936,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         output_file: str,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "extractld",
             input_file,
@@ -1120,7 +951,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         output_file: str,
         force: bool = False,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "extractraw",
             input_file,
@@ -1133,7 +964,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         self,
         input_file: str,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "info",
             input_file,
@@ -1144,7 +975,7 @@ class CHDMan(QObject):  # Ensure QObject inheritance or manage signals appropria
         self,
         input_file: str,
         worker_id_suffix: Optional[str] = None,
-    ) -> CHDManSignals:
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         return self._create_and_start_worker(
             "verify",
             input_file,
@@ -1183,13 +1014,16 @@ class CHDTask:
     task_type: CHDTaskType
     input_file: str
     output_file: Optional[str] = None
-    compression_level: Optional[str] = None
+    compression_level: Optional[str] = (
+        None  # Should be Optional[List[str]] or str based on usage
+    )
     hunk_size: Optional[int] = None
     verify: bool = False
     force: bool = False
-    media_type: Optional[str] = None
-    algorithms: Optional[str] = None
-    user_data: Optional[Dict[str, Any]] = None
+    media_type: Optional[str] = None  # e.g., 'cdrom', 'harddisk'
+    algorithms: Optional[str] = None  # For createhd, specific algorithms
+    user_data: Optional[Dict[str, Any]] = None  # For arbitrary data like row index
+    row: Optional[int] = None  # For tracking table row in UI
 
     def __post_init__(self):
         if self.user_data is None:
@@ -1217,12 +1051,13 @@ class CHDManager(QObject):
         ] = {}  # Should be managed by CHDMan instance
         self.thread_pool = QThreadPool()  # CHDMan has its own thread_pool
         self._task_mutex = QMutex()
-        self.logger = logging.getLogger(__name__ + ".CHDManager")
+        # Use DebugLogger for consistent logging
+        # self.logger = logging.getLogger(__name__ + ".CHDManager")
         # Patch: Add batch tracking for integration
         self._last_executed_batch: List[CHDTask] = []
 
     def log(self, message: str):
-        self.logger.info(message)
+        debug_logger.info("core.chdmanworker", message)
 
     def terminate_all_chdman_processes(self):
         # Delegate to the CHDMan instance
@@ -1239,30 +1074,33 @@ class CHDManager(QObject):
         with QMutexLocker(self._task_mutex):
             self.tasks.clear()
 
-    def execute_all_tasks(self):
+    def has_pending_tasks(self) -> bool:
+        """Check if there are any tasks pending in the queue."""
+        with QMutexLocker(self._task_mutex):
+            return bool(self.tasks)
+
+    def start_processing(self) -> List[Tuple[CHDManSignals, CHDManWorker]]:
         with QMutexLocker(self._task_mutex):
             if not self.tasks:
-                self.logger.info("No tasks to execute.")
+                debug_logger.info("core.chdmanworker", "No tasks to process.")
                 self.signals.finished.emit(
-                    True, "No tasks to execute."
+                    True, "No tasks to process."
                 )  # CHDManager's own signal
-                return
+                return []
 
             self._last_executed_batch = list(self.tasks)  # Copy tasks
-            self.logger.info(f"Executing {len(self.tasks)} tasks.")
-            # This method should use initiate_task_and_get_signals.
-            # Placeholder for fixing deduplication test (direct init).
-            # Full batch execution needs robust signal mgmt.
-            # A full batch exec would need to manage signals & progress.
+            debug_logger.info(
+                "core.chdmanworker", f"Starting processing of {len(self.tasks)} tasks."
+            )
+            workers_signals = []
             for task in self.tasks:
-                # Simplified loop. Real batch exec needs robust signal handling.
-                # Deduplication test uses initiate_task_and_get_signals.
-                self.initiate_task_and_get_signals(task)
-            # self.clear_tasks() # Typically clear after starting
-            # Emitting general finished signal for batch needs task tracking.
-            # This method's role in current fix context is limited.
+                signals, worker = self.initiate_task_and_get_signals(task)
+                workers_signals.append((signals, worker))
+            return workers_signals
 
-    def initiate_task_and_get_signals(self, task: CHDTask) -> CHDManSignals:
+    def initiate_task_and_get_signals(
+        self, task: CHDTask
+    ) -> Tuple[CHDManSignals, CHDManWorker]:
         """Initiates a single CHD task and returns its signals for direct monitoring."""
         worker_suffix = str(id(task))
 
@@ -1276,7 +1114,7 @@ class CHDManager(QObject):
 
             media_type_lower = task.media_type.lower()
             if media_type_lower == "cd":
-                return self.chdman.create_cd(
+                signals, worker = self.chdman.create_cd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     compression=task.algorithms or task.compression_level,
@@ -1284,8 +1122,10 @@ class CHDManager(QObject):
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif media_type_lower == "dvd":
-                return self.chdman.create_dvd(
+                signals, worker = self.chdman.create_dvd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     compression=task.algorithms or task.compression_level,
@@ -1293,8 +1133,10 @@ class CHDManager(QObject):
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif media_type_lower == "hd":
-                return self.chdman.create_hd(
+                signals, worker = self.chdman.create_hd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     compression=task.algorithms or task.compression_level,
@@ -1302,8 +1144,10 @@ class CHDManager(QObject):
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif media_type_lower == "ld":
-                return self.chdman.createld(
+                signals, worker = self.chdman.createld(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     compression=task.algorithms or task.compression_level,
@@ -1311,6 +1155,8 @@ class CHDManager(QObject):
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             else:
                 raise ValueError(
                     f"Unsupported media_type for COMPRESS: {task.media_type}"
@@ -1329,40 +1175,50 @@ class CHDManager(QObject):
                 )
 
             if task.task_type == CHDTaskType.EXTRACT_CD:
-                return self.chdman.extract_cd(
+                signals, worker = self.chdman.extract_cd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif task.task_type == CHDTaskType.EXTRACT_DVD:
-                return self.chdman.extract_dvd(
+                signals, worker = self.chdman.extract_dvd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif task.task_type == CHDTaskType.EXTRACT_HD:
-                return self.chdman.extract_hd(
+                signals, worker = self.chdman.extract_hd(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif task.task_type == CHDTaskType.EXTRACT_LD:
-                return self.chdman.extract_ld(
+                signals, worker = self.chdman.extract_ld(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             elif task.task_type == CHDTaskType.EXTRACT_RAW:
-                return self.chdman.extract_raw(
+                signals, worker = self.chdman.extract_raw(
                     input_file=task.input_file,
                     output_file=task.output_file,
                     force=task.force,
                     worker_id_suffix=worker_suffix,
                 )
+                worker.user_data = {"row": task.row, "file_path": task.input_file}
+                return signals, worker
             else:
                 raise AssertionError(
                     f"Unhandled task type {task.task_type.name} in extract block."
@@ -1371,16 +1227,20 @@ class CHDManager(QObject):
         elif task.task_type == CHDTaskType.INFO:
             if not task.input_file:
                 raise ValueError("input_file is required for INFO task.")
-            return self.chdman.info(
+            signals, worker = self.chdman.info(
                 input_file=task.input_file, worker_id_suffix=worker_suffix
             )
+            worker.user_data = {"row": task.row, "file_path": task.input_file}
+            return signals, worker
 
         elif task.task_type == CHDTaskType.VERIFY:
             if not task.input_file:
                 raise ValueError("input_file is required for VERIFY task.")
-            return self.chdman.verify(
+            signals, worker = self.chdman.verify(
                 input_file=task.input_file, worker_id_suffix=worker_suffix
             )
+            worker.user_data = {"row": task.row, "file_path": task.input_file}
+            return signals, worker
         else:
             raise NotImplementedError(
                 f"Task type {task.task_type.name} not implemented."
@@ -1392,9 +1252,10 @@ class CHDManager(QObject):
         # For full batch processing via execute_all_tasks, that method would use
         # initiate_task_and_get_signals and then connect to those signals to manage
         # overall batch progress and completion.
-        self.logger.warning(
+        debug_logger.warning(
+            "core.chdmanworker",
             "_delegate_task_to_chdman is likely deprecated. "
-            "Use initiate_task_and_get_signals directly."
+            "Use initiate_task_and_get_signals directly.",
         )
         # However, if execute_all_tasks is to be fully functional with the old
         # signal connection model, it would need refactoring. Focus on test fix.
@@ -1423,18 +1284,20 @@ class CHDManager(QObject):
     def _on_delegated_worker_finished(
         self, task: CHDTask, success: bool, message: str, worker_id: str
     ):
-        self.logger.info(
+        debug_logger.info(
+            "core.chdmanworker",
             f"Delegated worker {worker_id} for task {task.input_file} "
-            f"finished. Success: {success}. Msg: {message}"
+            f"finished. Success: {success}. Msg: {message}",
         )
         self.signals.task_completed.emit(task.input_file, success, message)
 
     def _on_delegated_worker_error(
         self, task: CHDTask, error_message: str, worker_id: str
     ):
-        self.logger.error(
+        debug_logger.error(
+            "core.chdmanworker",
             f"Delegated worker {worker_id} for task {task.input_file} "
-            f"error: {error_message}"
+            f"error: {error_message}",
         )
         self.signals.task_completed.emit(task.input_file, False, error_message)
 
@@ -1458,11 +1321,14 @@ class CHDManager(QObject):
         return len(self.chdman.active_workers)
 
     def cleanup(self):
-        self.logger.info("CHDManager cleanup initiated. Delegating to CHDMan instance.")
+        debug_logger.info(
+            "core.chdmanworker",
+            "CHDManager cleanup initiated. Delegating to CHDMan instance.",
+        )
         self.chdman.cleanup()
         with QMutexLocker(self._task_mutex):
             self.tasks.clear()
-        self.logger.info("CHDManager cleanup finished.")
+        debug_logger.info("core.chdmanworker", "CHDManager cleanup finished.")
 
 
 _chd_manager_singleton = None

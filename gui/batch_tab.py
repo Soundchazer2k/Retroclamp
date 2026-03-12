@@ -16,7 +16,8 @@ import traceback
 # Import archive handling libraries
 import zipfile
 from datetime import datetime
-from typing import Any, List
+from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 import py7zr
 import rarfile
@@ -41,10 +42,9 @@ from PySide6.QtWidgets import (
 )
 
 from core.archive import ArchiveManager
-
-# Import core components
 from core.chdman import CHDCompressionType, CHDMan, CHDTask, CHDTaskType
 from core.checkpoint_manager import CheckpointManager
+from core.debug_logger import get_logger
 from core.file_scanner import FileScanner
 
 # Import UI components and utilities
@@ -176,15 +176,17 @@ class BatchWorker(QThread):
             raise FileExistsError(f"Output file already exists: {output_path}")
 
         # Create a CHDMan instance
-        chdman = CHDMan()
+        chdman_instance = CHDMan()
 
         # Perform the compression
         # Use the correct method for compression (e.g., create_cd, create_dvd, etc.)
-        chdman.create_cd(
+        # Explicitly type the worker to help mypy
+        worker: CHDManWorker = chdman_instance.create_cd(
             input_file=input_path,
             output_file=output_path,
             compression=self.compression,
-        ).signals.progress_updated.connect(self._progress_callback)
+        )
+        worker.signals.progress_updated.connect(self._progress_callback)
 
     def _extract_file(self, input_path: str, output_path: str):
         """Extract a CHD file."""
@@ -196,14 +198,16 @@ class BatchWorker(QThread):
             raise FileExistsError(f"Output file already exists: {output_path}")
 
         # Create a CHDMan instance
-        chdman = CHDMan()
+        chdman_instance = CHDMan()
 
         # Perform the extraction
         # Use the correct method for extraction (e.g., extract_cd, extract_hd, etc.)
-        chdman.extract_cd(
+        # Explicitly type the worker to help mypy
+        worker: CHDManWorker = chdman_instance.extract_cd(
             input_file=input_path,
             output_file=output_path,
-        ).signals.progress_updated.connect(self._progress_callback)
+        )
+        worker.signals.progress_updated.connect(self._progress_callback)
 
     def _progress_callback(self, progress: float, status: str):
         self.progress.emit(5 + int(progress * 0.9), status)
@@ -240,7 +244,7 @@ class BatchTab(QWidget):
     task_error = Signal(str, int)
     task_finished = Signal(bool, str, int)  # success, message, row
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None, app_settings: Any = None):
         # ...existing code...
         self.log_text = None  # Will be initialized in setup_ui
 
@@ -250,22 +254,25 @@ class BatchTab(QWidget):
             parent: The parent widget.
         """
         super().__init__(parent)
+        self.app_settings = app_settings
+        self.logger = (
+            get_logger(app_settings, module_name="BatchTab") if app_settings else None
+        )
 
         # Initialize instance variables
-        self.files = []
-        self.output_dirs = {}
+        self.files: List[Dict[str, Any]] = []
+        self.output_dirs: Dict[str, str] = {}
         self.current_task_index = 0
         self.is_processing = False
         self.is_aborting = False
         self.processed_files = 0
         self.failed_files = 0
         self.total_files = 0
-        self.temp_directories = []  # Track temporary directories for cleanup
+        self.temp_directories: List[Path] = []
 
         # Initialize the CHD manager (singleton)
-        from core.chdman import get_chd_manager
 
-        self.chd_manager = get_chd_manager()
+        self.chd_manager = CHDMan(app_settings=app_settings)
 
         # Initialize the checkpoint manager
         self.checkpoint_manager = CheckpointManager()
@@ -1369,13 +1376,6 @@ class BatchTab(QWidget):
             if hasattr(self, "abort_btn"):
                 self.abort_btn.setEnabled(False)
 
-        # Add abort button if not exists
-        if not hasattr(self, "abort_btn") and hasattr(self, "button_layout"):
-            self.abort_btn = QPushButton("Abort")
-            self.abort_btn.setIcon(load_svg_icon("x", 16, "#f8f8f2"))
-            self.abort_btn.clicked.connect(self.abort_processing)
-            self.button_layout.insertWidget(4, self.abort_btn)
-
         # Update start button
         if not is_processing:
             self.start_btn.setText("Start Processing")
@@ -2278,5 +2278,3 @@ class BatchTab(QWidget):
             selected_files = file_dialog.selectedFiles()
             if selected_files:
                 self.add_files(selected_files)
-
-    # Signal handlers - using the first implementation of these functions

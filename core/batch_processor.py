@@ -5,7 +5,10 @@ with support for pausing, resuming, and tracking progress of operations.
 """
 
 import json
-import logging
+
+from core.debug_logger import DebugLogger
+
+debug_logger = DebugLogger(module_name="core.batch_processor")
 import os
 import sys
 import time
@@ -25,8 +28,6 @@ from PySide6.QtCore import (
 )
 
 from .chdman import CHDManager, CHDTask, CHDTaskType
-
-logger = logging.getLogger(__name__)
 
 
 class BatchTaskStatus(Enum):
@@ -110,11 +111,11 @@ class BatchItem:
             try:
                 item_data["status"] = BatchTaskStatus[item_data["status"]]
             except KeyError:
-                logger.warning(
+                debug_logger.warning(
+                    "core.batch_processor",
                     f"Invalid status value: {item_data['status']}, "
-                    "defaulting to PENDING"
+                    f"defaulting to PENDING",
                 )
-
                 item_data["status"] = BatchTaskStatus.PENDING
 
         # Ensure required fields are present
@@ -138,11 +139,11 @@ class BatchItem:
                 try:
                     item_data[field_name] = field_type(item_data[field_name])
                 except (ValueError, TypeError):
-                    logger.warning(
+                    debug_logger.warning(
+                        "core.batch_processor",
                         f"Invalid {field_name} value: {item_data[field_name]}, "
-                        "defaulting to 0"
+                        f"defaulting to 0",
                     )
-
                     item_data[field_name] = field_type(0)
 
         # Handle boolean fields
@@ -253,7 +254,10 @@ class BatchProcessor(QObject):
         self.is_running = False
         self.signals = BatchSignals()
         self.mutex = QRecursiveMutex()  # Allows the same thread to re-acquire the lock
-        logger.debug("BatchProcessor: Using QRecursiveMutex for re-entrant locking")
+        debug_logger.debug(
+            "core.batch_processor",
+            "BatchProcessor: Using QRecursiveMutex for re-entrant locking",
+        )
         self.current_task: Optional[CHDTask] = None
         self._abort_requested = False
         self._batch_start_time: Optional[float] = None
@@ -346,16 +350,16 @@ class BatchProcessor(QObject):
 
     def __len__(self) -> int:
         """Return the number of items in the batch."""
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             return len(self.items)
 
@@ -406,16 +410,16 @@ class BatchProcessor(QObject):
             except OSError as e:
                 raise ValueError(f"Failed to create output directory: {e}") from e
 
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             # Check for duplicates
             for item in self.items:
@@ -456,7 +460,10 @@ class BatchProcessor(QObject):
                 item = self.add_item(**item_data)
                 added_items.append(item)
             except Exception:
-                logger.error(f"Failed to add item {item_data}")
+                debug_logger.error(
+                    "core.batch_processor",
+                    f"Failed to add item {item_data}",
+                )
                 raise ValueError("Invalid item") from None
         return added_items
 
@@ -469,16 +476,16 @@ class BatchProcessor(QObject):
         Returns:
             bool: True if item was removed, False if index is invalid
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if 0 <= index < len(self.items):
                 del self.items[index]
@@ -493,16 +500,16 @@ class BatchProcessor(QObject):
         This will cancel any in-progress operations and remove all items
         from the batch queue. It also resets the progress indicators.
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             self.items.clear()
             self.current_index = 0
@@ -515,18 +522,16 @@ class BatchProcessor(QObject):
         Returns:
             bool: True if processing was paused, False if not running or already paused
         """
-        logger.debug(
-            "[%s] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[%s] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.is_paused:
                 return False
@@ -535,22 +540,22 @@ class BatchProcessor(QObject):
             # Pause the current CHD task if any
             if self.current_task:
                 self.chd_manager.pause_task(self.current_task)
-            logger.info("Batch processing paused")
+            debug_logger.info("core.batch_processor", "Batch processing paused")
             return True
 
     @Slot(float, str)
     def _on_progress(self, progress: float, message: str) -> None:
         """Handle progress updates from current task."""
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -563,16 +568,16 @@ class BatchProcessor(QObject):
     @Slot(bool, str)
     def _on_finished(self, success: bool, message: str) -> None:
         """Handle task completion."""
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -593,16 +598,16 @@ class BatchProcessor(QObject):
     @Slot(str)
     def _on_error(self, error_message: str) -> None:
         """Handle task errors."""
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -611,16 +616,16 @@ class BatchProcessor(QObject):
 
     def _process_next_item(self) -> None:
         """Process the next item in the batch queue with retry logic."""
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             # Initialize batch timing on first item
             if self.current_index == 0 and self._batch_start_time is None:
@@ -687,14 +692,16 @@ class BatchProcessor(QObject):
         self.is_running = False
         self.current_task = None
         self.signals.finished.emit()
-        logger.info("Batch processing completed")
+        debug_logger.info("core.batch_processor", "Batch processing completed")
 
     def _skip_item(self, item: BatchItem, reason: str) -> None:
         """Skip processing an item with the given reason."""
         item.status = BatchTaskStatus.SKIPPED
         item.progress = 0
         self.signals.item_skipped.emit(item, reason)
-        logger.info(f"Skipped item {item.input_path}: {reason}")
+        debug_logger.info(
+            "core.batch_processor", f"Skipped item {item.input_path}: {reason}"
+        )
 
         # Move to next item
         self.current_index += 1
@@ -708,9 +715,10 @@ class BatchProcessor(QObject):
         if item.retry_count < item.max_retries:
             # Retry the item
             retry_delay = 2**item.retry_count  # Exponential backoff
-            logger.warning(
+            debug_logger.warning(
+                "core.batch_processor",
                 f"Retry {item.retry_count}/{item.max_retries} for {item.input_path} "
-                f"after {retry_delay}s: {error}"
+                f"after {retry_delay}s: {error}",
             )
             # Update status to indicate retry
             item.status = BatchTaskStatus.PENDING
@@ -726,7 +734,10 @@ class BatchProcessor(QObject):
             self.current_index += 1
             QTimer.singleShot(0, self._process_next_item)
             self.signals.item_progress.emit(item, None)
-            logger.error(f"Failed to process {item.input_path}: {item.error}")
+            debug_logger.error(
+                "core.batch_processor",
+                f"Failed to process {item.input_path}: {item.error}",
+            )
             # Move to next item
             self.current_index += 1
             QTimer.singleShot(0, self._process_next_item)
@@ -740,16 +751,16 @@ class BatchProcessor(QObject):
             progress: Progress percentage (0-100)
             message: Status message
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -779,7 +790,9 @@ class BatchProcessor(QObject):
                             item.bytes_processed = new_bytes_processed
                             break
                 except (ValueError, IndexError) as e:
-                    logger.warning(f"Error parsing bytes from message: {e}")
+                    debug_logger.warning(
+                        "core.batch_processor", f"Error parsing bytes from message: {e}"
+                    )
                     pass
 
             # Emit progress with additional context
@@ -801,16 +814,16 @@ class BatchProcessor(QObject):
             success: Whether the task completed successfully
             message: Completion message
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -828,7 +841,9 @@ class BatchProcessor(QObject):
                         self._total_bytes_processed += item.bytes_processed
 
                 self.signals.item_completed.emit(item)
-                logger.info(f"Completed processing {item.input_path}")
+                debug_logger.info(
+                    "core.batch_processor", f"Completed processing {item.input_path}"
+                )
 
                 # Move to next item
                 self.current_index += 1
@@ -837,7 +852,9 @@ class BatchProcessor(QObject):
                 if self.current_index >= len(self.items):
                     self.is_running = False
                     self.signals.finished.emit()
-                    logger.info("Batch processing completed")
+                    debug_logger.info(
+                        "core.batch_processor", "Batch processing completed"
+                    )
                 else:
                     QTimer.singleShot(0, self._process_next_item)
             else:
@@ -851,16 +868,16 @@ class BatchProcessor(QObject):
             task_id: ID of the task that failed
             error: Error message
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.is_running or self.current_index >= len(self.items):
                 return
@@ -873,16 +890,16 @@ class BatchProcessor(QObject):
         Returns:
             float: Progress percentage (0-100)
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.items:
                 return 0.0
@@ -916,16 +933,16 @@ class BatchProcessor(QObject):
         Returns:
             Optional[BatchItem]: The current batch item, or None if not processing
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if 0 <= self.current_index < len(self.items):
                 return self.items[self.current_index]
@@ -938,16 +955,16 @@ class BatchProcessor(QObject):
             Optional[float]: Estimated time remaining in seconds, or None if not
             enough data
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not hasattr(self, "_batch_start_time") or not self._batch_start_time:
                 return None
@@ -991,19 +1008,18 @@ class BatchProcessor(QObject):
         Returns:
             List of serialized batch items
         """
-        logger = logging.getLogger(__name__)
         items_dict = []
         try:
-            logger.debug(
-                "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Attempting to acquire mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             with QMutexLocker(self.mutex):
-                logger.debug(
-                    "[BatchProcessor] Acquired mutex in %s.%s",
-                    self.__class__.__name__,
-                    sys._getframe().f_code.co_name,
+                debug_logger.debug(
+                    "core.batch_processor",
+                    f"[BatchProcessor] Acquired mutex in "
+                    f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
                 )
                 for item in self.items:
                     try:
@@ -1011,31 +1027,32 @@ class BatchProcessor(QObject):
                         item_dict["status"] = item.status.name
                         items_dict.append(item_dict)
                     except Exception as e:
-                        logger.error(
-                            f"Error serializing batch item: {e}", exc_info=True
+                        debug_logger.exception(
+                            "core.batch_processor",
+                            f"Error serializing batch item: {e}",
                         )
                         continue
         except Exception:
-            logger.exception("Unexpected error during batch item serialization")
+            debug_logger.error(
+                "core.batch_processor",
+                "Unexpected error during batch item serialization",
+            )
             raise
         return items_dict
 
     def _write_state_to_file(self, file_path: str, state: Dict[str, Any]) -> bool:
         """Write state to file with atomic write and checksum verification.
 
-        {{ ... }}
-                Args:
-                    file_path: Path to save the state file
-                    state: State dictionary to save
+        Args:
+            file_path: Path to save the state file
+            state: State dictionary to save
 
-                Returns:
-                    bool: True if write was successful, False otherwise
+        Returns:
+            bool: True if write was successful, False otherwise
         """
         import hashlib
-        import logging
         import os
 
-        logger = logging.getLogger(__name__)
         temp_file = f"{file_path}.{os.getpid()}.tmp"
 
         try:
@@ -1079,17 +1096,26 @@ class BatchProcessor(QObject):
                 else:
                     raise
 
-            logger.info("Successfully saved state to " + file_path)
+            debug_logger.info(
+                "core.batch_processor",
+                f"Successfully saved state to {file_path}",
+            )
             return True
 
         except Exception:
-            logger.error("Failed to write state to " + file_path)
+            debug_logger.error(
+                "core.batch_processor",
+                f"Failed to write state to {file_path}",
+            )
             # Clean up temp file if it exists
             if os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
                 except Exception as cleanup_error:
-                    logger.error("Failed to clean up temp file: " + str(cleanup_error))
+                    debug_logger.error(
+                        "core.batch_processor",
+                        f"Failed to clean up temp file: {cleanup_error}",
+                    )
             return False
 
     def _notify_state_saved(self, file_path: str) -> None:
@@ -1098,21 +1124,25 @@ class BatchProcessor(QObject):
         Args:
             file_path: Path to the saved state file
         """
-        import logging
 
         from PySide6.QtCore import QCoreApplication, QTimer
-
-        logger = logging.getLogger(__name__)
 
         def emit_signal():
             try:
                 self.signals.state_saved.emit(file_path)
             except Exception as e:
-                logger.error(f"Error emitting state_saved signal: {e}", exc_info=True)
+                debug_logger.error(
+                    "core.batch_processor",
+                    f"Error emitting state_saved signal: {e}",
+                    exc_info=True,
+                )
 
         app = QCoreApplication.instance()
         if app is None:
-            logger.warning("No QApplication instance, signal not emitted")
+            debug_logger.warning(
+                "core.batch_processor",
+                "No QApplication instance, signal not emitted",
+            )
         elif app.thread() != self.thread():
             QTimer.singleShot(0, emit_signal)
         else:
@@ -1141,15 +1171,12 @@ class BatchProcessor(QObject):
             ValueError: If file_path is invalid
             OSError: If there's an issue with file system operations
         """
-        import logging
         import os
-
-        logger = logging.getLogger(__name__)
 
         # Validate file path
         if not file_path or not isinstance(file_path, str):
             error_msg = f"Invalid file path: {file_path}"
-            logger.error(error_msg)
+            debug_logger.error("core.batch_processor", error_msg)
             self.signals.error_occurred.emit(error_msg)
             return False
 
@@ -1158,7 +1185,7 @@ class BatchProcessor(QObject):
             warning_msg = (
                 "[save_state] Already saving state, ignoring concurrent request"
             )
-            logger.warning(warning_msg)
+            debug_logger.warning("core.batch_processor", warning_msg)
             self.signals.error_occurred.emit(warning_msg)
             return False
 
@@ -1170,7 +1197,7 @@ class BatchProcessor(QObject):
                 os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
             except OSError as e:
                 error_msg = f"Failed to create directory for state file: {e}"
-                logger.error(error_msg)
+                debug_logger.error("core.batch_processor", error_msg)
                 self.signals.error_occurred.emit(error_msg)
                 return False
 
@@ -1179,14 +1206,14 @@ class BatchProcessor(QObject):
                 state = self._prepare_state_dict()
             except Exception as e:
                 error_msg = f"Failed to prepare state dictionary: {e}"
-                logger.exception(error_msg)
+                debug_logger.error("core.batch_processor", error_msg)
                 self.signals.error_occurred.emit(error_msg)
                 return False
 
             # Write state to file
             if not self._write_state_to_file(file_path, state):
                 error_msg = f"Failed to write state to {file_path}"
-                logger.error(error_msg)
+                debug_logger.error("core.batch_processor", error_msg)
                 self.signals.error_occurred.emit(error_msg)
                 return False
 
@@ -1196,7 +1223,7 @@ class BatchProcessor(QObject):
 
         except Exception as e:
             error_msg = f"Unexpected error saving state: {e}"
-            logger.exception(error_msg)
+            debug_logger.error("core.batch_processor", error_msg)
             self.signals.error_occurred.emit(error_msg)
             return False
         finally:
@@ -1212,16 +1239,16 @@ class BatchProcessor(QObject):
                 (current_item_index, total_items, percentage_complete,
                 time_remaining_seconds)
         """
-        logger.debug(
-            "[BatchProcessor] Attempting to acquire mutex in %s.%s",
-            self.__class__.__name__,
-            sys._getframe().f_code.co_name,
+        debug_logger.debug(
+            "core.batch_processor",
+            f"[BatchProcessor] Attempting to acquire mutex in "
+            f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
         )
         with QMutexLocker(self.mutex):
-            logger.debug(
-                "[BatchProcessor] Acquired mutex in %s.%s",
-                self.__class__.__name__,
-                sys._getframe().f_code.co_name,
+            debug_logger.debug(
+                "core.batch_processor",
+                f"[BatchProcessor] Acquired mutex in "
+                f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}",
             )
             if not self.items:
                 return 0, 0, 0.0, None

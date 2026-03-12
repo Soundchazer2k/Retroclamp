@@ -5,12 +5,11 @@ a modern, user-friendly interface for compressing, decompressing, and managing
 disk images using the CHDMAN utility.
 """
 
-import logging
 import os
 import sys
 import traceback
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -45,10 +44,10 @@ from modules.app_settings import AppSettings
 from modules.theme_config import ThemeConfig
 
 # Import local modules
-from modules.ui_functions import apply_theme, load_svg_icon, resize_grips
+from modules.ui_functions import apply_theme, load_svg_icon  # Removed resize_grips
 
 # Global settings
-SETTINGS = None
+SETTINGS = AppSettings()  # Initialize globally
 THEME_CONFIG = None
 
 
@@ -65,7 +64,17 @@ class MainWindow(QMainWindow):
 
         # Initialize settings
         global SETTINGS, THEME_CONFIG
-        SETTINGS = AppSettings()
+        # SETTINGS = AppSettings() # Removed, now initialized globally
+        SETTINGS.set("logging", "enabled", True)
+        SETTINGS.set("logging", "log_level", "DEBUG")
+
+        # Initialize the DebugLogger with the loaded settings
+        from core.debug_logger import get_logger
+
+        self.logger = get_logger(SETTINGS)
+        if self.logger:
+            self.logger.info("main", "DebugLogger initialized with AppSettings.")
+
         THEME_CONFIG = ThemeConfig()
 
         # Load theme
@@ -95,6 +104,7 @@ class MainWindow(QMainWindow):
         # Set up window properties
         self.setWindowTitle("RetroClamp")
         self.setWindowIcon(QIcon("resources/icon.ico"))
+        self.setMinimumSize(800, 600)  # Explicitly set a smaller minimum window size
         self.resize(1200, 800)
 
         # Set proper window flags to enable frameless window with resizing
@@ -119,7 +129,21 @@ class MainWindow(QMainWindow):
         # Apply theme
         apply_theme(self, self.theme_config)
 
-        # Show the window
+        # Initialize state flags for event handling
+        self._resizing = False
+        self._dragging = False
+
+        # Install event filter on the title bar for dragging (must be after setup_ui)
+        if hasattr(self, "title_bar"):
+            self.title_bar.installEventFilter(self)
+        else:
+            if self.logger:  # DIAGNOSTIC
+                self.logger.warning(
+                    "main.__init__",
+                    "self.title_bar not found after setup_ui. Dragging will not work.",
+                )
+
+        # Show the window - moved after filter installation and flag init
         self.show()
 
     def setup_ui(self):
@@ -146,10 +170,10 @@ class MainWindow(QMainWindow):
         # Sidebar (left menu) background frame
         self.left_menu_bg = QFrame()
         self.left_menu_bg.setObjectName("leftMenuBg")
-        self.left_menu_bg.setMinimumWidth(220)  # expanded width
-        self.left_menu_bg.setMaximumWidth(220)  # expanded width
-        # Collapsed width (for compact mode) – increased for better usability
-        self.collapsed_width = 80  # was 60
+        # Consistent expanded width
+        self.left_menu_bg.setMinimumWidth(240)
+        self.left_menu_bg.setMaximumWidth(240)
+        self.collapsed_width = 80
 
         # Layout for sidebar menu (vertical)
         self.left_menu_layout = QVBoxLayout(self.left_menu_bg)
@@ -159,7 +183,8 @@ class MainWindow(QMainWindow):
         # Top menu section (contains main navigation buttons)
         self.top_menu = QFrame()
         self.top_menu.setObjectName("topMenu")
-        self.top_menu.setMinimumHeight(50)
+        # This minimum height will be dictated by its children (buttons)
+        self.top_menu.setMinimumHeight(0)
 
         # Layout for top menu buttons
         self.top_menu_layout = QVBoxLayout(self.top_menu)
@@ -170,19 +195,16 @@ class MainWindow(QMainWindow):
         self.btn_home = QPushButton("Home")
         self.btn_home.setObjectName("btn_home")
         self.btn_home.setProperty("icon_name", "home")
-        # make icons a bit larger
         icon = load_svg_icon("home", 32, "#f8f8f2")
         self.btn_home.setIcon(icon)
         self.btn_home.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_home.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT FOR BETTER VERTICAL RESIZING
+        self.btn_home.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_home.setFont(QFont("Segoe UI", 11))
         self.btn_home.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -191,19 +213,16 @@ class MainWindow(QMainWindow):
         self.btn_compress = QPushButton("Compress")
         self.btn_compress.setObjectName("btn_compress")
         self.btn_compress.setProperty("icon_name", "file-zip")
-        # make icons a bit larger
         icon = load_svg_icon("file-zip", 32, "#f8f8f2")
         self.btn_compress.setIcon(icon)
         self.btn_compress.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_compress.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.btn_compress.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_compress.setFont(QFont("Segoe UI", 11))
         self.btn_compress.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -212,19 +231,16 @@ class MainWindow(QMainWindow):
         self.btn_extract = QPushButton("Extract")
         self.btn_extract.setObjectName("btn_extract")
         self.btn_extract.setProperty("icon_name", "file-export")
-        # make icons a bit larger
         icon = load_svg_icon("file-export", 32, "#f8f8f2")
         self.btn_extract.setIcon(icon)
         self.btn_extract.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_extract.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.btn_extract.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_extract.setFont(QFont("Segoe UI", 11))
         self.btn_extract.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -233,19 +249,16 @@ class MainWindow(QMainWindow):
         self.btn_tools = QPushButton("Tools")
         self.btn_tools.setObjectName("btn_tools")
         self.btn_tools.setProperty("icon_name", "tool")
-        # make icons a bit larger
         icon = load_svg_icon("tool", 32, "#f8f8f2")
         self.btn_tools.setIcon(icon)
         self.btn_tools.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_tools.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.btn_tools.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_tools.setFont(QFont("Segoe UI", 11))
         self.btn_tools.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -254,25 +267,22 @@ class MainWindow(QMainWindow):
         self.btn_theme = QPushButton("Theme")
         self.btn_theme.setObjectName("btn_theme")
         self.btn_theme.setProperty("icon_name", "palette")
-        # make icons a bit larger
         icon = load_svg_icon("palette", 32, "#f8f8f2")
         self.btn_theme.setIcon(icon)
         self.btn_theme.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_theme.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.btn_theme.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_theme.setFont(QFont("Segoe UI", 11))
         self.btn_theme.setStyleSheet(
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
         self.top_menu_layout.addWidget(self.btn_theme)
 
-        # Menu spacer
+        # Menu spacer (this handles the vertical expansion/contraction between sections)
         self.menu_spacer = QSpacerItem(
             20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding
         )
@@ -280,8 +290,8 @@ class MainWindow(QMainWindow):
         # Bottom menu
         self.bottom_menu = QFrame()
         self.bottom_menu.setObjectName("bottomMenu")
-        # Increase minimum height to match the visual height of top menu
-        self.bottom_menu.setMinimumHeight(120)  # Changed from 50 to 120
+        # This minimum height will be dictated by its children (buttons)
+        self.bottom_menu.setMinimumHeight(0)
 
         # Bottom menu layout
         self.bottom_menu_layout = QVBoxLayout(self.bottom_menu)
@@ -292,19 +302,16 @@ class MainWindow(QMainWindow):
         self.btn_settings = QPushButton("Settings")
         self.btn_settings.setObjectName("btn_settings")
         self.btn_settings.setProperty("icon_name", "settings")
-        # make icons a bit larger
         icon = load_svg_icon("settings", 32, "#f8f8f2")
         self.btn_settings.setIcon(icon)
         self.btn_settings.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.btn_settings.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.btn_settings.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.btn_settings.setFont(QFont("Segoe UI", 11))
         self.btn_settings.setStyleSheet(
             """
             text-align: left;
-            padding-left: 16px;
             padding-left: 16px;
         """
         )
@@ -314,25 +321,20 @@ class MainWindow(QMainWindow):
         self.toggle_button = QPushButton("Hide")
         self.toggle_button.setObjectName("toggleButton")
         self.toggle_button.setProperty("icon_name", "menu-2")
-        # make icons a bit larger
         icon = load_svg_icon("menu-2", 32, "#f8f8f2")
         self.toggle_button.setIcon(icon)
         self.toggle_button.setIconSize(QSize(32, 32))
-        # bump button height to match
-        self.toggle_button.setMinimumHeight(120)
+        # REDUCED BUTTON HEIGHT
+        self.toggle_button.setMinimumHeight(45)  # Changed from 60
 
-        # increase font size and left-align everything
         self.toggle_button.setFont(QFont("Segoe UI", 11))
         self.toggle_button.setStyleSheet(
             """
             text-align: left;
             padding-left: 16px;
-            padding-left: 16px;
         """
         )
 
-        # Add widgets to left menu layout
-        self.left_menu_layout.addWidget(self.top_menu)
         # Store nav buttons and their labels for collapse/expand
         self.nav_buttons = [
             (self.btn_home, "Home"),
@@ -345,7 +347,8 @@ class MainWindow(QMainWindow):
         ]
 
         # Add widgets to left menu layout
-        self.left_menu_layout.addStretch()
+        self.left_menu_layout.addWidget(self.top_menu)
+        self.left_menu_layout.addStretch()  # This is the spacer
         self.left_menu_layout.addWidget(self.bottom_menu)
         self.left_menu_layout.addWidget(self.toggle_button)
 
@@ -414,11 +417,11 @@ class MainWindow(QMainWindow):
         )
 
         # Add single file compression tab
-        self.single_file_tab = CompressionTab()
+        self.single_file_tab = CompressionTab(app_settings=SETTINGS)
         self.compression_page.addTab(self.single_file_tab, "Single File")
 
         # Add batch processing tab
-        self.batch_tab = BatchTab()
+        self.batch_tab = BatchTab(app_settings=SETTINGS)
         self.compression_page.addTab(self.batch_tab, "Batch Processing")
 
         self.pages.addWidget(self.compression_page)
@@ -453,35 +456,38 @@ class MainWindow(QMainWindow):
         self.content_area_layout.addWidget(self.content)
 
         # Create a custom resize handle with an icon that matches the application style
-        self.resize_handle = QPushButton(self.content)
+        # MAKE RESIZE HANDLE CHILD OF CENTRAL_WIDGET FOR CORRECT POSITIONING
+        self.resize_handle = QPushButton(self.central_widget)  # Changed parent here
         self.resize_handle.setObjectName("resizeHandle")
         self.resize_handle.setFixedSize(16, 16)
         self.resize_handle.setFlat(True)
+        # self.resize_handle.setText("R") # DIAGNOSTIC: Set text to see if button appears - REMOVED
 
         # Use the provided SVG icon
-
-        # Get theme colors for consistent styling
         colors = self.theme_config.get("colors", {})
-        text_color = colors.get(
-            "text", "#f8f8f2"
-        )  # Use text color from theme (same as other icons)
-
-        # Load the provided SVG icon
+        text_color = colors.get("text", "#f8f8f2")
         icon = load_svg_icon("resize_icon_exact", 16, text_color)
         self.resize_handle.setIcon(icon)
         self.resize_handle.setIconSize(QSize(16, 16))
 
-        # Make it transparent except for the icon
+        # DIAGNOSTIC: Use a theme color for background instead of fully transparent
+        bg_color = self.theme_config.get("colors", {}).get(
+            "secondaryBackground", "#44475a"
+        )
+        hover_bg_color = "rgba(255, 255, 255, 0.1)"  # Keep hover distinct
         self.resize_handle.setStyleSheet(
-            "#resizeHandle { background-color: transparent; border: none; }"
-            "#resizeHandle:hover { background-color: rgba(255, 255, 255, 0.1); }"
+            f"#resizeHandle {{ background-color: {bg_color}; border: none; }}"
+            f"#resizeHandle:hover {{ background-color: {hover_bg_color}; }}"
         )
         self.resize_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
 
         # Install event filter to handle mouse events for resizing
         self.resize_handle.installEventFilter(self)
-
-        # We'll position it correctly in showEvent and resizeEvent
+        if self.logger:  # DIAGNOSTIC
+            self.logger.info(
+                "main.setup_ui",
+                "Resize handle created, text set to 'R', and event filter installed.",
+            )  # DIAGNOSTIC
 
         # Add widgets to main content layout
         self.main_content_layout.addWidget(self.left_menu_bg)
@@ -489,29 +495,6 @@ class MainWindow(QMainWindow):
 
         # Set initial page
         self.pages.setCurrentWidget(self.home_page)
-
-        # Connect home page signals
-        self.connect_home_signals()
-
-        # Set up tools page
-        # self.setup_tools_page()
-
-    def connect_home_signals(self):
-        """Connect home page signals."""
-        # Connect home page signals to page changes
-        self.home_page.compress_clicked.connect(
-            lambda: self.change_page(self.compression_page)
-        )
-        self.home_page.extract_clicked.connect(
-            lambda: self.change_page(self.extraction_page)
-        )
-        self.home_page.tools_clicked.connect(lambda: self.change_page(self.tools_page))
-        self.home_page.batch_clicked.connect(lambda: self.change_page(self.batch_page))
-
-    # def setup_tools_page(self):
-    #     """Set up the tools page."""
-    #     # Plugin system removed in favor of direct ToolsTab integration.
-    #     pass
 
     def connect_signals(self):
         """Connect widget signals to slots."""
@@ -528,9 +511,20 @@ class MainWindow(QMainWindow):
         # Toggle button
         self.toggle_button.clicked.connect(self.toggle_menu)
 
-        # Connect title bar window buttons
-        # Note: The title bar already connects its buttons to window actions internally
-        # so we don't need to connect them again here
+        # Home page feature button signals
+        if hasattr(self, "home_page"):
+            self.home_page.compress_clicked.connect(
+                lambda: self.change_page(self.compression_page)
+            )
+            self.home_page.extract_clicked.connect(
+                lambda: self.change_page(self.extraction_page)
+            )
+            self.home_page.tools_clicked.connect(
+                lambda: self.change_page(self.tools_page)
+            )
+            self.home_page.batch_clicked.connect(
+                lambda: self.change_page(self.batch_page)
+            )
 
     def change_page(self, page):
         """Change the current page."""
@@ -570,11 +564,8 @@ class MainWindow(QMainWindow):
             # Apply appropriate styling based on collapsed state
             if collapsed:
                 button.setStyleSheet("text-align: center;")
-                button.setIconSize(
-                    QSize(48, 48)
-                )  # Make icons even larger in collapsed mode
+                button.setIconSize(QSize(48, 48))
             else:
-                # Use fixed positioning for icons and text
                 button.setStyleSheet("padding-left: 16px; text-align: left;")
                 button.setIconSize(QSize(32, 32))
 
@@ -599,7 +590,6 @@ class MainWindow(QMainWindow):
                     " text-align: center;"
                 )
             else:
-                # Use fixed positioning for icons and text (same as non-selected)
                 selected_button.setStyleSheet(
                     f"background-color: {primary}; color: {background};"
                     " padding-left: 16px; text-align: left;"
@@ -614,43 +604,26 @@ class MainWindow(QMainWindow):
         """Toggle the left menu between expanded and collapsed states."""
         # Get current and min/max widths
         width = self.left_menu_bg.width()
-        min_width = self.collapsed_width  # Use the class variable we defined
-        max_width = 240  # Match the suggested value
+        min_width = self.collapsed_width
+        max_width = 240
 
         # Set target width based on current state
         target_width = max_width if width == min_width else min_width
 
-        # Once collapsed, remove the text; when expanded, restore it
+        # When target is collapsed, set text empty and adjust icon sizes for all buttons
         if target_width == min_width:
-            self.toggle_button.setText("")  # icons-only
-            # collapse - set center alignment and larger icons for all buttons
-            for btn in (
-                self.btn_home,
-                self.btn_compress,
-                self.btn_extract,
-                self.btn_tools,
-                self.btn_theme,
-                self.btn_settings,
-                self.toggle_button,
-            ):
-                btn.setStyleSheet("text-align: center;")
+            for btn, _ in self.nav_buttons:
+                btn.setText("")  # Remove text when collapsing
                 btn.setIconSize(QSize(48, 48))  # Larger icons in collapsed mode
+                btn.setStyleSheet("text-align: center;")  # Center align icons
         else:
-            self.toggle_button.setText("Hide")  # full label
-            # expand - set left alignment and standard icon size for all buttons
-            for btn in (
-                self.btn_home,
-                self.btn_compress,
-                self.btn_extract,
-                self.btn_tools,
-                self.btn_theme,
-                self.btn_settings,
-                self.toggle_button,
-            ):
+            # When expanding, restore text and standard icon size
+            for btn, label in self.nav_buttons:
+                btn.setText(label)  # Restore text
+                btn.setIconSize(QSize(32, 32))  # Standard icon size
                 btn.setStyleSheet(
                     "padding-left: 16px; text-align: left;"
-                )  # Fixed positioning
-                btn.setIconSize(QSize(32, 32))
+                )  # Left align text
 
         # Create minimum width animation
         self.animation_min = QPropertyAnimation(self.left_menu_bg, b"minimumWidth")
@@ -670,8 +643,8 @@ class MainWindow(QMainWindow):
         self.animation_min.start()
         self.animation_max.start()
 
-        # When done, update each button's text & icon size
-        self.animation_min.finished.connect(self._update_nav_button_states)
+        # The _update_nav_button_states is now integrated into the toggle_menu logic
+        # We don't need to connect finished signal if text/icon updates are done upfront
 
     def toggle_maximize(self):
         """Toggle between maximized and normal window state."""
@@ -683,64 +656,44 @@ class MainWindow(QMainWindow):
             self.maximize_btn.setIcon(load_svg_icon("copy", 16, "#f8f8f2"))
 
     def showEvent(self, event):
-        """Handle show events.
-
-        Args:
-            event: Show event
-        """
-        # Call parent method
+        """Handle show events."""
+        if self.logger:  # DIAGNOSTIC
+            self.logger.debug("main.showEvent", "showEvent triggered.")  # DIAGNOSTIC
+        self._update_resize_handle_position()
         super().showEvent(event)
 
-        # Position the resize handle at the bottom-right corner
-        # when window is first shown
-        if hasattr(self, "resize_handle"):
-            self._update_resize_handle_position()
-
     def resizeEvent(self, event):
-        """Handle resize events.
-
-        Args:
-            event: Resize event
-        """
-        # Call parent method
-        super().resizeEvent(event)
-
-        # Position the resize handle at the bottom-right corner
-        if hasattr(self, "resize_handle"):
-            self._update_resize_handle_position()
-
-        # Update resize grips (legacy support)
-        resize_grips(self)
+        """Handle resize events."""
+        super().resizeEvent(event)  # Restore super call
+        if self.logger:  # DIAGNOSTIC
+            self.logger.debug(
+                "main.resizeEvent", f"resizeEvent triggered. New size: {event.size()}."
+            )  # DIAGNOSTIC
+        self._update_resize_handle_position()
 
     def _update_resize_handle_position(self):
         """Update the position of the resize handle to the bottom-right corner."""
-        # Use QTimer to ensure content has proper size when positioning
-        QTimer.singleShot(
-            0,
-            lambda: self.resize_handle.move(
-                self.content.width() - 16, self.content.height() - 16
-            ),
-        )
+        if hasattr(self, "resize_handle") and hasattr(self, "central_widget"):
+            parent_width = self.central_widget.width()
+            parent_height = self.central_widget.height()
+            handle_width = self.resize_handle.width()
+            handle_height = self.resize_handle.height()
 
-    def _update_nav_button_states(self):
-        """Update button text and icon size based on sidebar collapse state."""
-        # collapse if width <= min_width
-        collapsed = self.left_menu_bg.width() <= self.collapsed_width
-        for btn, label in self.nav_buttons:
-            if collapsed:
-                # hide text, bump icon
-                btn.setText("")
-                btn.setIconSize(
-                    QSize(48, 48)
-                )  # Increased from 40 to 48 for larger icons
-                btn.setStyleSheet("text-align: center;")  # center align when collapsed
-            else:
-                # restore
-                btn.setText(label)
-                btn.setIconSize(QSize(32, 32))  # standard size with text
-                btn.setStyleSheet(
-                    "text-align: left; padding-left: 16px;"
-                )  # left align when expanded
+            # Position at the bottom-right corner of the central_widget
+            x = parent_width - handle_width
+            y = parent_height - handle_height
+            self.resize_handle.move(x, y)
+            self.resize_handle.raise_()  # DIAGNOSTIC: Ensure it's on top
+            if self.logger:  # DIAGNOSTIC
+                self.logger.debug(
+                    "main._update_resize_handle_position",
+                    f"Resize handle moved to ({x}, {y}) and raised.",
+                )  # DIAGNOSTIC
+        elif self.logger:
+            self.logger.warning(
+                "main._update_resize_handle_position",
+                "Resize handle or central_widget not found for positioning.",
+            )  # DIAGNOSTIC
 
     def eventFilter(self, obj, event):
         """Filter events for objects that have installed an event filter.
@@ -752,39 +705,114 @@ class MainWindow(QMainWindow):
         Returns:
             True if the event was handled, False otherwise
         """
-        # Handle resize handle events
-        if obj == self.resize_handle:
-            if event.type() == event.Type.MouseButtonPress:
-                # Store initial position and window size
-                self._resize_start_pos = QPoint(
-                    event.globalPosition().x(), event.globalPosition().y()
-                )
-                self._resize_start_size = self.size()
-                return True
-            elif event.type() == event.Type.MouseMove and hasattr(
-                self, "_resize_start_pos"
-            ):
-                # Calculate the new size
-                current_pos = QPoint(
-                    event.globalPosition().x(), event.globalPosition().y()
-                )
-                delta = current_pos - self._resize_start_pos
-                new_size = self._resize_start_size + QSize(delta.x(), delta.y())
-                # Apply minimum size constraints
-                new_size = QSize(
-                    max(new_size.width(), 800), max(new_size.height(), 600)
-                )
-                # Resize the window
-                self.resize(new_size)
-                return True
-            elif event.type() == event.Type.MouseButtonRelease:
-                # Clean up
-                if hasattr(self, "_resize_start_pos"):
-                    delattr(self, "_resize_start_pos")
-                if hasattr(self, "_resize_start_size"):
-                    delattr(self, "_resize_start_size")
-                return True
-        # Pass the event to the parent class
+        try:
+            # Handle resize handle events
+            if obj == self.resize_handle:
+                if event.type() == event.Type.MouseButtonPress:
+                    self._resize_start_pos = QPoint(
+                        event.globalPosition().x(), event.globalPosition().y()
+                    )
+                    self._resize_start_size = self.size()
+                    self._resizing = True
+                    event.accept()  # Accept event to prevent further processing
+                    return True
+                elif event.type() == event.Type.MouseMove and self._resizing:
+                    current_pos = QPoint(
+                        event.globalPosition().x(), event.globalPosition().y()
+                    )
+                    delta = current_pos - self._resize_start_pos
+
+                    # Calculate raw new dimensions
+                    new_width = self._resize_start_size.width() + delta.x()
+                    new_height = self._resize_start_size.height() + delta.y()
+
+                    # DIAGNOSTIC LOGGING
+                    if self.logger:
+                        self.logger.debug(
+                            "MainWindow.eventFilter.resize",
+                            f"StartSize: {self._resize_start_size}, Delta: {delta}, "
+                            f"Raw NewSize: ({new_width}, {new_height})",
+                        )
+
+                    # Apply minimum size constraints
+                    min_w = self.minimumWidth()  # From setMinimumSize or default 0
+                    min_h = self.minimumHeight()  # From setMinimumSize or default 0
+
+                    # If min_w/min_h are still 0 (not explicitly set to something > 0),
+                    # then fall back to minimumSizeHint.
+                    if min_w == 0:
+                        min_w = self.minimumSizeHint().width()
+                    if min_h == 0:
+                        min_h = self.minimumSizeHint().height()
+
+                    if self.logger:
+                        self.logger.debug(
+                            "MainWindow.eventFilter",
+                            f"Using effective minimums for constraint: width={min_w}, height={min_h}",
+                        )
+
+                    # Diagnostic prints
+                    constrained_width = max(new_width, min_w)
+                    constrained_height = max(new_height, min_h)
+
+                    # DIAGNOSTIC LOGGING
+                    if self.logger:
+                        self.logger.debug(
+                            "MainWindow.eventFilter.resize",
+                            f"Constrained NewSize: ({constrained_width}, {constrained_height})",
+                        )
+
+                    self.resize(constrained_width, constrained_height)
+                    event.accept()
+                    return True
+                elif event.type() == event.Type.MouseButtonRelease:
+                    self._resizing = False
+                    if hasattr(self, "_resize_start_pos"):
+                        del self._resize_start_pos
+                    # Do not clear _resize_start_size here, it's just a snapshot
+                    event.accept()
+                    return True
+
+            # Handle title bar events for dragging
+            elif obj == self.title_bar:
+                if event.type() == event.Type.MouseButtonPress:
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        self._dragging = True
+                        self._drag_start_position = (
+                            event.globalPosition().toPoint()
+                            - self.frameGeometry().topLeft()
+                        )
+                        event.accept()
+                        return True
+                elif event.type() == event.Type.MouseMove and self._dragging:
+                    self.move(
+                        event.globalPosition().toPoint() - self._drag_start_position
+                    )
+                    event.accept()
+                    return True
+                elif event.type() == event.Type.MouseButtonRelease:
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        self._dragging = False
+                        event.accept()
+                        return True
+        except AttributeError as e:
+            log_msg = f"AttributeError in eventFilter: {e} on object {obj}, event type {event.type()}"
+            if self.logger:
+                self.logger.error("MainWindow.eventFilter", log_msg)
+            else:
+                print(log_msg)
+            # For an error loop, returning False might be safer than re-raising
+            # or letting it fall through to super if the error is persistent.
+            return False  # Attempt to break loop by not consuming event if error occurs
+        except Exception as e:
+            log_msg = f"Unexpected error in eventFilter: {e} on object {obj}, event type {event.type()}"
+            if self.logger:
+                self.logger.error("MainWindow.eventFilter", log_msg)
+            else:
+                print(log_msg)
+            return False  # Attempt to break loop
+
+        # Pass unhandled events to the parent class's event filter
         return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
@@ -799,52 +827,68 @@ class MainWindow(QMainWindow):
         """
         # Check if confirmation is required
         if SETTINGS.get("general", "confirm_exit", True):
-            # Show confirmation dialog
             reply = QMessageBox.question(
                 self,
                 "Confirm Exit",
                 "Are you sure you want to exit?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
 
-            if reply == QMessageBox.No:
+            if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
 
-        # Log the close event with a very visible message
-        print("\n\n***** APPLICATION CLOSING - CLEANUP STARTING *****\n\n")
-
-        # Clean up temporary directories in the compression tab
-        if hasattr(self, "single_file_tab") and self.single_file_tab:
-            print("Cleaning up compression tab resources...")
-            try:
-                self.single_file_tab.cleanup_temp_directories()
-                print("Compression tab cleanup completed successfully")
-            except Exception as e:
-                print(f"ERROR during compression tab cleanup: {str(e)}")
+        self.logger.info("main", "Application closing - cleanup starting.")
 
         # Terminate any running CHDMAN processes
         try:
-            if hasattr(self, "single_file_tab") and self.single_file_tab:
-                self.single_file_tab.chd_manager.terminate_all_chdman_processes()
-                print("CHDMAN processes terminated successfully")
+            if hasattr(self, "compression_page") and self.compression_page.chd_manager:
+                self.logger.info(
+                    "main", "Terminating CHDMAN processes from compression_page."
+                )
+                self.compression_page.chd_manager.terminate_all_processes()
+            if hasattr(self, "extraction_page") and self.extraction_page.chd_manager:
+                self.logger.info(
+                    "main", "Terminating CHDMAN processes from extraction_page."
+                )
+                self.extraction_page.chd_manager.terminate_all_processes()
+            # Add other pages if they also use chd_manager directly
         except Exception as e:
-            print(f"ERROR terminating CHDMAN processes: {str(e)}")
+            self.logger.error("main", f"Error terminating CHDMAN processes: {str(e)}")
 
-        # Clean up resources
-        print("Application closing, cleaning up resources...")
+        # Clean up temporary directories
+        # Example for extraction_page, adapt for other pages if needed
+        if hasattr(self, "extraction_page") and hasattr(
+            self.extraction_page, "cleanup_temp_directories"
+        ):
+            try:
+                self.logger.info(
+                    "main", "Cleaning up extraction_page temporary directories."
+                )
+                self.extraction_page.cleanup_temp_directories()
+            except Exception as e:
+                self.logger.error(
+                    "main", f"Error during extraction_page cleanup: {str(e)}"
+                )
 
-        # Clean up compression tab resources (temp directories and CHDMAN processes)
-        if hasattr(self, "compression_tab") and self.compression_tab:
-            print("Cleaning up compression tab resources...")
-            self.compression_tab.cleanup()
+        # Add cleanup for other tabs like batch_tab if they have similar methods
+        if hasattr(self, "batch_page") and hasattr(
+            self.batch_page, "cleanup_temp_directories"
+        ):
+            try:
+                self.logger.info(
+                    "main", "Cleaning up batch_page temporary directories."
+                )
+                self.batch_page.cleanup_temp_directories()
+            except Exception as e:
+                self.logger.error("main", f"Error during batch_page cleanup: {str(e)}")
 
         # Save settings
         if hasattr(SETTINGS, "save"):
+            self.logger.info("main", "Saving application settings.")
             SETTINGS.save()
 
-        # Call parent method
         super().closeEvent(event)
 
 
@@ -853,14 +897,14 @@ def log_uncaught_exception(exc_type, exc_value, exc_traceback):
     with open("error.log", "a", encoding="utf-8") as f:
         f.write("\n--- Uncaught Exception ---\n")
         traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-    # Also print to stderr
-    traceback.print_exception(exc_type, exc_value, exc_traceback)
-    # Show a message box if possible
+    traceback.print_exception(
+        exc_type, exc_value, exc_traceback
+    )  # Also print to stderr
     try:
         from PySide6.QtWidgets import QMessageBox
 
         msg = QMessageBox()
-        msg.setIcon(QMessageBox.Critical)
+        msg.setIcon(QMessageBox.Icon.Critical)
         msg.setWindowTitle("Application Error")
         msg.setText("An unexpected error occurred. See error.log for details.")
         msg.setDetailedText(
@@ -868,6 +912,9 @@ def log_uncaught_exception(exc_type, exc_value, exc_traceback):
         )
         msg.exec()
     except Exception as e:
+        # Use standard logging if DebugLogger isn't available or fails here
+        import logging
+
         logging.warning(f"Exception executing message dialog: {e}")
 
 
@@ -876,19 +923,15 @@ sys.excepthook = log_uncaught_exception
 
 def main():
     """Main entry point for the application."""
-    # Create application
     app = QApplication(sys.argv)
-
-    # Set application properties
     app.setApplicationName("RetroClamp")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(
+        SETTINGS.get("general", "version", "1.2.0-dev")
+    )  # Use version from settings
     app.setOrganizationName("RetroClamp")
     app.setOrganizationDomain("retroclamp.org")
 
-    # Create window and keep a reference to prevent garbage collection
-    _ = MainWindow()
-
-    # Run application
+    _ = MainWindow()  # Create window and keep a reference
     sys.exit(app.exec())
 
 

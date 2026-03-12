@@ -68,6 +68,13 @@ class AppSettings:
             "low_disk_threshold_gb": 5,
             "save_checkpoint_interval": 5,  # minutes
         },
+        # Logging settings
+        "logging": {
+            "enabled": True,
+            "level": "INFO",
+            "max_log_size_mb": 10,
+            "max_log_files": 5,
+        },
         # File types settings
         "file_types": {
             "cd_extensions": [".cue", ".bin", ".iso", ".img", ".cdr"],
@@ -90,9 +97,6 @@ class AppSettings:
         },
         # Advanced settings
         "advanced": {
-            "log_level": "INFO",
-            "max_log_size_mb": 10,
-            "max_log_files": 5,
             "enable_experimental": False,
             "custom_parameters": "",
         },

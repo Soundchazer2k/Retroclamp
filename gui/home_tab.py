@@ -39,7 +39,9 @@ class FeatureButton(QPushButton):
         super().__init__(parent)
 
         # Set up button properties
-        self.setMinimumSize(180, 90)  # Reduced from 200x100 for better responsiveness
+        self.setMinimumSize(
+            180, 70
+        )  # Reduced from 90 to 70 for better vertical density
         self.setCursor(Qt.PointingHandCursor)
         self.setProperty("icon_name", icon_name)
 
@@ -202,7 +204,7 @@ class HomeTab(QWidget):
         features_scroll_area = QScrollArea()
         features_scroll_area.setWidgetResizable(True)
         features_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        features_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        features_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         features_scroll_area.setFrameShape(QFrame.NoFrame)  # Remove frame
 
         # Features grid

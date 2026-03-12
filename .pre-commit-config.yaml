@@ -16,7 +16,7 @@ repos:
   rev: 1.8.3
   hooks:
   - id: bandit
-    entry: bandit -r . --format txt
+    entry: bandit -r .
     pass_filenames: false
     args: [--severity-level=high]
     exclude: ^bandit_report.txt$

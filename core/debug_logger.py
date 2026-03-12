@@ -1,4 +1,35 @@
-"""Debug Logging System for RetroClamp."""
+"""
+Debug Logging System for RetroClamp.
+
+This module provides the DebugLogger class, a robust and configurable logging
+utility for desktop applications.
+
+Key Features:
+- Contextual logging with optional extra data (pass extra: dict to any log method)
+- Log level is configurable via AppSettings
+  (key: logging.log_level, e.g. "DEBUG", "INFO")
+- Log handler level is set explicitly to match logger level
+- Log file location is consistent and OS-appropriate (see get_log_file_path)
+- Default log filename: retroclamp.log
+
+Example Usage:
+    from core.debug_logger import DebugLogger
+
+    # Basic usage
+    debug_logger = DebugLogger(module_name="core.example")
+    debug_logger.info("core.example", "This is an info message.")
+
+    # With extra context
+    debug_logger.info(
+        "core.example", "User action", extra={"user_id": 42, "action": "start"}
+    )
+
+    # With AppSettings for configurable log level
+    debug_logger = DebugLogger(
+        settings=app_settings, module_name="core.example"
+    )
+    debug_logger.debug("core.example", "Debug message visible if log level is DEBUG")
+"""
 
 import logging
 import os
@@ -11,7 +42,16 @@ if TYPE_CHECKING:
 
 
 class DebugLogger:
-    """Handles debug logging operations for the application."""
+    """
+    Handles debug logging operations for the application.
+
+    - Use .debug(), .info(), .warning(), .error(), .exception() methods for logging.
+    - Pass extra contextual data to logs via the 'extra' parameter (dict).
+    - Log level can be controlled via AppSettings
+      ("logging.log_level").
+    - Log file is written to retroclamp.log in a platform-appropriate
+      logs directory.
+    """
 
     LOG_LEVELS = {
         "DEBUG": logging.DEBUG,
@@ -20,7 +60,7 @@ class DebugLogger:
         "ERROR": logging.ERROR,
     }
 
-    DEFAULT_LOG_FILENAME = "chdman_gui_debug.log"  # Synced with PRD-001
+    DEFAULT_LOG_FILENAME = "retroclamp.log"  # Consistent with get_log_file_path
     DEFAULT_MAX_SIZE_MB = 10  # Reverted to original default
     DEFAULT_BACKUP_COUNT = 1  # Reverted to original default
 
@@ -45,7 +85,12 @@ class DebugLogger:
         self.settings = settings  # To get AppSettings instance
         self.module_name = module_name
         self.logger = logging.getLogger(self.app_name)
-        self.logger.setLevel(logging.DEBUG)  # Process all, handler filters
+        # Determine log level from settings if available
+        log_level = logging.DEBUG
+        if self.settings:
+            level_str = self.settings.get("logging", "log_level", "DEBUG")
+            log_level = self.LOG_LEVELS.get(level_str.upper(), logging.DEBUG)
+        self.logger.setLevel(log_level)
         self._handler: Optional[RotatingFileHandler] = None
         self._formatter = logging.Formatter(
             fmt=(
@@ -84,8 +129,8 @@ class DebugLogger:
             # Fallback to a local log file in CWD in case of any error
             # Use basic print for this critical fallback, as logger might be the issue.
             print(
-                f"[DebugLogger] CRITICAL ERROR in get_log_file_path: {e}."
-                f" Falling back to CWD."
+                f"[DebugLogger] CRITICAL ERROR in get_log_file_path: {e}. "
+                f"Falling back to CWD."
             )
             local_log_dir = os.path.join(os.getcwd(), "logs")
             os.makedirs(local_log_dir, exist_ok=True)
@@ -97,7 +142,7 @@ class DebugLogger:
     def is_enabled(self) -> bool:
         """Check if logging is enabled based on app settings."""
         if self.settings:
-            return bool(self.settings.get("advanced", "debug_logging_enabled", False))
+            return bool(self.settings.get("logging", "enabled", False))
         return False  # Default to False if settings not accessible
 
     def configure_handler(
@@ -117,10 +162,14 @@ class DebugLogger:
             default_max_size = max_log_file_size_mb
             if self.settings:
                 max_size_setting = self.settings.get(
-                    "advanced", "max_log_file_size_mb", default_max_size
+                    "logging",
+                    "max_log_size_mb",
+                    default_max_size,
                 )
                 backup_count_setting = self.settings.get(
-                    "advanced", "log_backup_count", log_backup_count
+                    "logging",
+                    "max_log_files",
+                    log_backup_count,
                 )
             else:
                 max_size_setting = default_max_size
@@ -134,6 +183,8 @@ class DebugLogger:
                 encoding="utf-8",
             )
             self._handler.setFormatter(self._formatter)
+            # Explicitly set handler log level to match logger
+            self._handler.setLevel(self.logger.level)
             self.logger.addHandler(self._handler)
         else:
             if self._handler is not None:
@@ -146,7 +197,13 @@ class DebugLogger:
         return module_name or self.module_name or "DefaultModule"
 
     def _log(
-        self, level: int, module_name: Optional[str], message: str, *args, exc_info=None
+        self,
+        level: int,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        exc_info=None,
+        extra: Optional[dict] = None,
     ):
         if not self.is_enabled():
             return
@@ -172,28 +229,67 @@ class DebugLogger:
 
         effective_module_name = self._get_effective_module_name(module_name)
         extra_info = {"module_name_override": effective_module_name}
+        if extra:
+            extra_info.update(extra)
 
         self.logger.log(level, message, *args, exc_info=exc_info, extra=extra_info)
 
-    def debug(self, module_name: Optional[str], message: str, *args):
+    def debug(
+        self,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        extra: Optional[dict] = None,
+    ):
         """Log a debug message."""
-        self._log(logging.DEBUG, module_name, message, *args)
+        self._log(logging.DEBUG, module_name, message, *args, extra=extra)
 
-    def info(self, module_name: Optional[str], message: str, *args):
+    def info(
+        self,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        extra: Optional[dict] = None,
+    ):
         """Log an info message."""
-        self._log(logging.INFO, module_name, message, *args)
+        self._log(logging.INFO, module_name, message, *args, extra=extra)
 
-    def warning(self, module_name: Optional[str], message: str, *args):
+    def warning(
+        self,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        extra: Optional[dict] = None,
+    ):
         """Log a warning message."""
-        self._log(logging.WARNING, module_name, message, *args)
+        self._log(logging.WARNING, module_name, message, *args, extra=extra)
 
-    def error(self, module_name: Optional[str], message: str, *args):
+    def error(
+        self,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        extra: Optional[dict] = None,
+    ):
         """Log an error message."""
-        self._log(logging.ERROR, module_name, message, *args)
+        self._log(logging.ERROR, module_name, message, *args, extra=extra)
 
-    def exception(self, module_name: Optional[str], message: str, *args):
+    def exception(
+        self,
+        module_name: Optional[str],
+        message: str,
+        *args,
+        extra: Optional[dict] = None,
+    ):
         """Log an error message with exception information."""
-        self._log(logging.ERROR, module_name, message, *args, exc_info=True)
+        self._log(
+            logging.ERROR,
+            module_name,
+            message,
+            *args,
+            exc_info=True,
+            extra=extra,
+        )
 
     def log_system_info(self):
         """Logs basic system and application information."""
@@ -219,14 +315,14 @@ class DebugLogger:
             return
         log_message = (
             f"CHDMAN Command: {command} | WD: {working_dir} | "
-            f"Exit Code: {exit_code} | Duration: {duration:.2f}s"
+            f"Exit Code: {exit_code} | "
+            f"Duration: {duration:.2f}s"
         )
         self.info(None, log_message)
         if exit_code != 0 and output:
             self.warning(None, f"CHDMAN Output: {output.strip()}")
 
 
-# Global logger instance
 _logger_instance: Optional[DebugLogger] = None
 
 

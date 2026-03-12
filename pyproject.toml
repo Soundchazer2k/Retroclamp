@@ -38,6 +38,7 @@ select = [
 ignore = [
     "E203",  # Whitespace before ':'
     "E402",  # Module level import not at top (for now)
+    "E501",  # Line too long (let formatter handle this)
 ]
 
 [tool.ruff.lint.per-file-ignores]

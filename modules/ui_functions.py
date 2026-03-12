@@ -303,20 +303,6 @@ def toggle_menu(window: QMainWindow, enable: bool) -> None:
     window.animation.start()
 
 
-def resize_grips(window: QMainWindow) -> None:
-    """Update the size grips for a resizable window.
-
-    Args:
-        window: Main window to update grips for
-    """
-    if not hasattr(window, "ui") or not hasattr(window.ui, "frame_size_grip"):
-        return
-
-    window.ui.frame_size_grip.setGeometry(
-        window.width() - 20, window.height() - 20, 20, 20
-    )
-
-
 def set_window_shadow(
     window: QWidget,
     color: str = "#000000",

@@ -4,14 +4,23 @@ This module provides functionality for scanning directories and filtering files
 based on extensions, with support for drag-and-drop operations.
 """
 
-import fnmatch
 import os
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
+from fnmatch import fnmatch
 from typing import List, Optional
 
-from PySide6.QtCore import QMimeData, QObject, QRunnable, QThreadPool, Signal, Slot
+from PySide6.QtCore import (
+    QMimeData,
+    QObject,
+    QRunnable,
+    QThreadPool,
+    Signal,
+    Slot,
+)
+
+from core.debug_logger import DebugLogger
 
 
 @dataclass
@@ -63,6 +72,7 @@ class ScannerWorker(QRunnable):
         include_extensions: Optional[List[str]] = None,
         exclude_extensions: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
+        debug_logger: Optional[DebugLogger] = None,
     ):
         """Initialize the ScannerWorker.
 
@@ -86,6 +96,7 @@ class ScannerWorker(QRunnable):
         self.exclude_patterns = exclude_patterns or []
         self.signals = ScannerSignals()
         self.cancelled = False
+        self.debug_logger = debug_logger
 
     @Slot()
     def run(self):
@@ -96,22 +107,26 @@ class ScannerWorker(QRunnable):
         """
         # Log all key paths and operation info to error.log (for debugging)
         try:
-            with open("error.log", "a", encoding="utf-8") as logf:
-                logf.write(f"\n[ScannerWorker] Starting run at: {datetime.now()}\n")
-                logf.write(f"  Path: {self.path}\n")
-                logf.write(f"  Recursive: {self.recursive}\n")
-                logf.write(f"  Include extensions: {self.include_extensions}\n")
-                logf.write(f"  Exclude extensions: {self.exclude_extensions}\n")
-                logf.write(f"  Exclude patterns: {self.exclude_patterns}\n")
+            if self.debug_logger:
+                self.debug_logger.debug(
+                    "core.file_scanner",
+                    f"[ScannerWorker] Starting run at: {datetime.now()}",
+                    extra={
+                        "path": self.path,
+                        "recursive": self.recursive,
+                        "include_extensions": self.include_extensions,
+                        "exclude_extensions": self.exclude_extensions,
+                        "exclude_patterns": self.exclude_patterns,
+                    },
+                )
         except Exception as logex:
             print(f"[ScannerWorker] Failed to log start: {logex}")
 
         try:
             if not os.path.exists(self.path):
-                with open("error.log", "a", encoding="utf-8") as logf:
-                    logf.write(
-                        f"[ScannerWorker] Path not found: {self.path} "
-                        f"at {datetime.now()}\n"
+                if self.debug_logger:
+                    self.debug_logger.error(
+                        "core.file_scanner", f"Path not found: {self.path}"
                     )
                 self.signals.error.emit(f"Path not found: {self.path}")
                 return
@@ -136,10 +151,9 @@ class ScannerWorker(QRunnable):
                 # Walk the directory
                 for root, dirs, filenames in os.walk(self.path):
                     if self.cancelled:
-                        with open("error.log", "a", encoding="utf-8") as logf:
-                            logf.write(
-                                f"[ScannerWorker] Scan cancelled by user at "
-                                f"{datetime.now()}\n"
+                        if self.debug_logger:
+                            self.debug_logger.warning(
+                                "core.file_scanner", "Scan cancelled by user"
                             )
                         self.signals.error.emit("Scan cancelled by user")
                         return
@@ -164,10 +178,9 @@ class ScannerWorker(QRunnable):
                     # Process files
                     for filename in filenames:
                         if self.cancelled:
-                            with open("error.log", "a", encoding="utf-8") as logf:
-                                logf.write(
-                                    f"[ScannerWorker] Scan cancelled by user "
-                                    f"at {datetime.now()}\n"
+                            if self.debug_logger:
+                                self.debug_logger.warning(
+                                    "core.file_scanner", "Scan cancelled by user"
                                 )
                             self.signals.error.emit("Scan cancelled by user")
                             return
@@ -192,9 +205,17 @@ class ScannerWorker(QRunnable):
                 file_count=file_count,
                 dir_count=dir_count,
             )
+            if self.debug_logger:
+                self.debug_logger.info(
+                    "core.file_scanner", "Scan completed successfully."
+                )
             self.signals.finished.emit(result)
 
         except Exception as e:
+            if self.debug_logger:
+                self.debug_logger.error(
+                    "core.file_scanner", f"Error during scan: {str(e)}"
+                )
             self.signals.error.emit(f"Error during scan: {str(e)}")
 
     def cancel(self):
@@ -212,7 +233,7 @@ class ScannerWorker(QRunnable):
         """
         # Check exclude patterns
         for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(os.path.basename(file_path), pattern):
+            if fnmatch(os.path.basename(file_path), pattern):
                 return False
 
         # Check file extension
@@ -242,7 +263,7 @@ class ScannerWorker(QRunnable):
 
         # Check exclude patterns
         for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(dir_name, pattern):
+            if fnmatch(dir_name, pattern):
                 return True
 
         return False
@@ -256,7 +277,9 @@ class DiskImageScanSignals(QObject):
 
 
 class DiskImageScanWorker(QRunnable):
-    def __init__(self, directory, extensions=None):
+    def __init__(
+        self, directory, extensions=None, debug_logger: Optional[DebugLogger] = None
+    ):
         super().__init__()
         self.directory = directory
         self.extensions = [
@@ -268,10 +291,16 @@ class DiskImageScanWorker(QRunnable):
         ]
         self.signals = DiskImageScanSignals()
         self.cancelled = False
+        self.debug_logger = debug_logger
 
     def run(self):
         try:
             if not os.path.exists(self.directory):
+                if self.debug_logger:
+                    self.debug_logger.error(
+                        "core.file_scanner",
+                        f"Directory not found: {self.directory}",
+                    )
                 self.signals.error.emit(f"Directory not found: {self.directory}")
                 return
             self.signals.started.emit(f"Scanning {self.directory}")
@@ -283,6 +312,10 @@ class DiskImageScanWorker(QRunnable):
             for _root, _, files in os.walk(self.directory):
                 for file in files:
                     if self.cancelled:
+                        if self.debug_logger:
+                            self.debug_logger.warning(
+                                "core.file_scanner", "Scan cancelled by user"
+                            )
                         self.signals.error.emit("Scan cancelled by user")
                         return
                     file_path = os.path.join(_root, file)
@@ -294,30 +327,44 @@ class DiskImageScanWorker(QRunnable):
                         self.signals.progress.emit(
                             len(disk_images), files_scanned, file_path
                         )
+            if self.debug_logger:
+                self.debug_logger.info(
+                    "core.file_scanner", "Disk image scan completed successfully."
+                )
             self.signals.finished.emit(disk_images)
         except Exception as e:
             tb = traceback.format_exc()
-            with open("error.log", "a", encoding="utf-8") as logf:
-                logf.write(f"[DiskImageScanWorker] Error at {datetime.now()}\n")
-                logf.write(tb)
+            if self.debug_logger:
+                self.debug_logger.error(
+                    "core.file_scanner",
+                    f"[DiskImageScanWorker] Error at {datetime.now()}\n{tb}",
+                )
             self.signals.error.emit(f"Error during disk image scan: {str(e)}\n{tb}")
 
     def cancel(self):
         self.cancelled = True
 
 
-class FileScanner:
+class FileScanner(QObject):
     """Manager for file scanning operations.
 
     This class provides a high-level interface for scanning directories and
     filtering files, handling the creation and management of worker threads.
     """
 
-    def __init__(self):
+    def __init__(self, debug_logger: Optional[DebugLogger] = None):
         """Initialize the FileScanner."""
+        super().__init__()
         self.thread_pool = QThreadPool()
+        self.thread_pool.setMaxThreadCount(1)  # Ensure only one scan runs at a time
+        self.current_worker = None
+        self.debug_logger = debug_logger
+        if self.debug_logger:
+            self.debug_logger.info("FileScanner", "Initialized")
 
-    def find_disk_images_async(self, directory: str, extensions=None):
+    def find_disk_images_async(
+        self, directory: str, extensions: Optional[List[str]] = None
+    ):
         """
         Asynchronously scan a directory for disk image files.
         Args:
@@ -328,7 +375,9 @@ class FileScanner:
             DiskImageScanSignals object for connecting to started, progress,
             finished, and error signals.
         """
-        worker = DiskImageScanWorker(directory, extensions)
+        worker = DiskImageScanWorker(
+            directory, extensions, debug_logger=self.debug_logger
+        )
         self.thread_pool.start(worker)
         return worker.signals
 
@@ -357,6 +406,8 @@ class FileScanner:
                 FileNotFoundError: If the path doesn't exist
         """
         if not os.path.exists(path):
+            if self.debug_logger:
+                self.debug_logger.error("core.file_scanner", f"Path not found: {path}")
             raise FileNotFoundError(f"Path not found: {path}")
 
         worker = ScannerWorker(
@@ -365,6 +416,7 @@ class FileScanner:
             include_extensions=include_extensions,
             exclude_extensions=exclude_extensions,
             exclude_patterns=exclude_patterns,
+            debug_logger=self.debug_logger,
         )
 
         self.thread_pool.start(worker)
@@ -390,11 +442,11 @@ class FileScanner:
 
         # Handle plain text (some applications provide paths as text)
         elif mime_data.hasText():
-            text = mime_data.text()
-            for line in text.splitlines():
-                line = line.strip()
-                if line and os.path.exists(line):
-                    paths.append(line)
+            # This might be a simple file path copied as text
+            text_data = mime_data.text()
+            # Basic check if it looks like a path
+            if os.path.exists(text_data):
+                paths.append(text_data)
 
         return paths
 
