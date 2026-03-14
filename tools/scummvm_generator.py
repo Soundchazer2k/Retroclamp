@@ -27,6 +27,7 @@ from modules.ui_functions import load_svg_icon
 
 # Plugin metadata
 PLUGIN_NAME = "SCUMMVM Generator"
+PLUGIN_ICON = "🎮"
 PLUGIN_DESCRIPTION = "Generate SCUMMVM configuration files for compressed game files"
 PLUGIN_VERSION = "1.0.0"
 PLUGIN_AUTHOR = "RetroClamp Team"
@@ -350,16 +351,15 @@ class ScummVMGenerator(QWidget):
             )
 
 
-def register_tab(parent_widget):
-    """Register the SCUMMVM Generator tab.
+def register_panel(tools_view: "QWidget") -> "QWidget":
+    """Register this plugin and return its panel widget.
 
     Args:
-        parent_widget: Parent widget to add the tab to
-    """
-    # Create the widget
-    widget = ScummVMGenerator(parent_widget)
+        tools_view: The ToolsView instance that will host this panel.
 
-    # Add to parent (assuming parent is a QTabWidget)
-    parent_widget.addTab(
-        widget, load_svg_icon("device-gamepad", 16, "#f8f8f2"), "SCUMMVM Generator"
-    )
+    Returns:
+        A QWidget subclass representing this plugin's full UI panel.
+    """
+    from PySide6.QtWidgets import QWidget  # noqa: F401, PLC0415
+
+    return ScummVMGenerator()

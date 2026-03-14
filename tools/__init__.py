@@ -1,8 +1,8 @@
 """Tools module for RetroClamp.
 
 This module provides a plugin system for loading and managing tool plugins.
-Each plugin should define a register_tab function that takes a parent widget
-and adds itself to the tools tab.
+Each plugin should define a register_panel function that accepts a ToolsView
+and returns an Optional[QWidget] to embed, or None for a coming-soon card.
 """
 
 import importlib
@@ -31,7 +31,7 @@ class ToolPlugin:
         description: str = "",
         version: str = "1.0.0",
         author: str = "",
-        register_func: Optional[Callable[[QWidget], None]] = None,
+        register_func: Optional[Callable[..., Optional[QWidget]]] = None,
     ):
         """Initialize the ToolPlugin.
 
@@ -50,14 +50,18 @@ class ToolPlugin:
         self.author = author
         self.register_func = register_func
 
-    def register(self, parent: QWidget) -> None:
+    def register(self, parent: QWidget) -> Optional[QWidget]:
         """Register the plugin with the parent widget.
 
         Args:
-            parent: Parent widget to register with
+            parent: Parent widget (ToolsView) to register with
+
+        Returns:
+            QWidget to embed in the tools panel, or None for a coming-soon card
         """
         if self.register_func:
-            self.register_func(parent)
+            return self.register_func(parent)
+        return None
 
 
 class ToolManager:
@@ -76,18 +80,24 @@ class ToolManager:
         self.tools_dir = tools_dir or os.path.dirname(__file__)
         self.plugins: Dict[str, ToolPlugin] = {}
 
-    def register_all_plugins(self, parent: QWidget) -> None:
-        """
-        Register all discovered plugins to the given parent widget.
+    def register_all_plugins(self, parent: QWidget) -> Dict[str, Optional[QWidget]]:
+        """Register all discovered plugins to the given parent widget.
+
         Each plugin's registration is wrapped in try/except to ensure
         error isolation. Any plugin that fails to register will be skipped,
         and the error will be reported without crashing the app.
+
+        Returns:
+            Mapping of module_name → QWidget (or None for coming-soon cards).
         """
+        results: Dict[str, Optional[QWidget]] = {}
         for plugin in self.plugins.values():
             try:
-                plugin.register(parent)
+                results[plugin.module_name] = plugin.register(parent)
             except Exception as e:
                 print(f"Error registering plugin '{plugin.module_name}': {e}")
+                results[plugin.module_name] = None
+        return results
 
     def discover_plugins(self) -> List[ToolPlugin]:
         """Discover available tool plugins.
@@ -106,9 +116,9 @@ class ToolManager:
                     # Import the module
                     module = importlib.import_module(f"tools.{module_name}")
 
-                    # Check if it has a register_tab function
-                    if hasattr(module, "register_tab") and callable(
-                        module.register_tab
+                    # Check if it has a register_panel function
+                    if hasattr(module, "register_panel") and callable(
+                        module.register_panel
                     ):
                         # Get plugin metadata
                         name = getattr(module, "PLUGIN_NAME", module_name)
@@ -189,7 +199,7 @@ class ToolManager:
                             description=description,
                             version=version,
                             author=author,
-                            register_func=module.register_tab,
+                            register_func=module.register_panel,
                         )
 
                         plugins.append(plugin)
@@ -199,29 +209,30 @@ class ToolManager:
 
         return plugins
 
-    def load_plugins(self, parent: QWidget) -> List[str]:
+    def load_plugins(self, parent: QWidget) -> Dict[str, Optional[QWidget]]:
         """Load and register all discovered plugins.
 
         Args:
-            parent: Parent widget to register plugins with
+            parent: Parent widget (ToolsView) to register plugins with
 
         Returns:
-            List of loaded plugin names
+            Mapping of plugin module_name → QWidget returned by register_panel
+            (or None when a plugin returns None / fails to load).
         """
         # Discover plugins if not already done
         if not self.plugins:
             self.discover_plugins()
 
-        # Register each plugin
-        loaded_plugins = []
+        # Register each plugin and collect widgets
+        results: Dict[str, Optional[QWidget]] = {}
         for plugin_name, plugin in self.plugins.items():
             try:
-                plugin.register(parent)
-                loaded_plugins.append(plugin_name)
+                results[plugin_name] = plugin.register(parent)
             except Exception as e:
                 print(f"Error registering plugin {plugin_name}: {str(e)}")
+                results[plugin_name] = None
 
-        return loaded_plugins
+        return results
 
     def get_plugin(self, name: str) -> Optional[ToolPlugin]:
         """Get a plugin by name.
@@ -241,3 +252,13 @@ class ToolManager:
             Dictionary of plugin name to plugin object
         """
         return self.plugins
+
+
+# ---------------------------------------------------------------------------
+# Module-level plugin list — imported by gui/views/tools_view.py
+# Each entry must expose: register_panel(tools_view) -> Optional[QWidget]
+# Optionally: PLUGIN_NAME, PLUGIN_ICON, PLUGIN_DESCRIPTION
+# ---------------------------------------------------------------------------
+from . import bios_validator, m3u_generator, scummvm_generator  # noqa: E402
+
+TOOL_PLUGINS = [m3u_generator, scummvm_generator, bios_validator]

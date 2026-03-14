@@ -273,7 +273,9 @@ class FocusedAnalyzer:
 
         if metrics["plugins_with_registration"] < metrics["total_plugins"]:
             missing = metrics["total_plugins"] - metrics["plugins_with_registration"]
-            recommendations.append(f"Add register_tab function to {missing} plugin(s)")
+            recommendations.append(
+                f"Add register_panel function to {missing} plugin(s)"
+            )
 
         recommendations.extend(
             [
@@ -326,11 +328,11 @@ class FocusedAnalyzer:
                 issues.append(f"{rel_path} missing metadata: {', '.join(missing)}")
 
             # Check for registration function
-            if "def register_tab" in content:
+            if "def register_panel" in content:
                 metrics["plugins_with_registration"] += 1
                 patterns["registration_methods"].append(rel_path)
             else:
-                issues.append(f"{rel_path} missing register_tab function")
+                issues.append(f"{rel_path} missing register_panel function")
 
             # Parse AST for deeper analysis
             try:
@@ -340,11 +342,11 @@ class FocusedAnalyzer:
                 for node in ast.walk(tree):
                     if (
                         isinstance(node, ast.FunctionDef)
-                        and node.name == "register_tab"
+                        and node.name == "register_panel"
                     ):
-                        if len(node.args.args) != 1:  # Should take parent widget
+                        if len(node.args.args) != 1:  # Should take tools_view
                             issues.append(
-                                f"{rel_path} register_tab has incorrect signature"
+                                f"{rel_path} register_panel has incorrect signature"
                             )
                             metrics["api_violations"] += 1
 

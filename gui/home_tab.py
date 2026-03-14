@@ -3,7 +3,14 @@
 This module provides the UI for the home screen of the application.
 """
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QEasingCurve,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame,
@@ -38,20 +45,20 @@ class FeatureButton(QPushButton):
         """
         super().__init__(parent)
 
-        # Set up button properties
-        self.setMinimumSize(
-            180, 70
-        )  # Reduced from 90 to 70 for better vertical density
-        self.setCursor(Qt.PointingHandCursor)
+        # Set up button properties for WCAG compliance
+        self.setMinimumSize(200, 88)  # Increased for better touch targets (WCAG 2.5.5)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setProperty("icon_name", icon_name)
 
         # Create layout
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Use QPushButton's built-in icon instead of a separate label
-        self.setIcon(load_svg_icon(icon_name, 32, "#f8f8f2"))
-        self.setIconSize(QSize(32, 32))
+        # Use QPushButton's built-in icon with high contrast for WCAG compliance
+        self.setIcon(
+            load_svg_icon(icon_name, 36, "#ffffff")
+        )  # Increased size and contrast
+        self.setIconSize(QSize(36, 36))
 
         # Use QPushButton's built-in text instead of a separate label
         self.setText(title)
@@ -59,25 +66,32 @@ class FeatureButton(QPushButton):
         # Store description for later use
         self.description = description
 
-        # Set stylesheet with all styling in one call
+        # Apply WCAG-compliant styling
         self.setStyleSheet(
             "QPushButton {"
-            "    background-color: rgba(68, 71, 90, 0.8);"  # Restore button background
-            "    border: none;"
-            "    color: #f8f8f2;"
+            "    background-color: rgba(60, 60, 60, 0.9);"  # Higher contrast background
+            "    border: 2px solid #5a5a5a;"  # Visible border for better definition
+            "    color: #ffffff;"  # Pure white for maximum contrast
             "    text-align: left;"
-            "    padding: 10px;"
-            "    padding-left: 40px;"  # Make room for the icon
+            "    padding: 16px;"
+            "    padding-left: 48px;"  # Make room for larger icon
             "    font-size: 14pt;"
-            "    font-weight: bold;"
-            "    border-radius: 6px;"
+            "    font-weight: 600;"
+            "    border-radius: 8px;"
+            "    min-height: 56px;"  # Ensure WCAG touch target compliance
             "}"
             "QPushButton:hover {"
-            "    background-color: rgba(255, 255, 255, 0.12);"
-            "    border: 1px solid #bd93f9;"
+            "    background-color: rgba(124, 77, 255, 0.2);"
+            "    border: 2px solid #7c4dff;"
+            "    color: #ffffff;"
             "}"
             "QPushButton:pressed {"
-            "    background-color: rgba(88, 91, 112, 1.0);"
+            "    background-color: rgba(124, 77, 255, 0.3);"
+            "    border: 2px solid #7c4dff;"
+            "}"
+            "QPushButton:focus {"
+            "    border: 3px solid #2196f3;"  # High contrast focus indicator
+            "    outline: none;"
             "}"
         )
 
@@ -90,9 +104,9 @@ class FeatureButton(QPushButton):
 
         # Setup hover animation
         self._original_geometry = None
-        self._anim = QPropertyAnimation(self, b"geometry")
+        self._anim = QPropertyAnimation(self, QByteArray(b"geometry"))
         self._anim.setDuration(100)
-        self._anim.setEasingCurve(QEasingCurve.OutQuad)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
     def enterEvent(self, event):
         """Handle mouse enter event with subtle lift animation."""

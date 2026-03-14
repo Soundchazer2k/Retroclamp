@@ -6,21 +6,45 @@ disk images using the CHDMAN utility.
 """
 
 import os
+import platform
 import sys
 import traceback
+from typing import Any, Optional
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt
-from PySide6.QtGui import QFont, QIcon
+# Modern theming (with fallbacks)
+try:
+    import qdarkstyle
+except ImportError:
+    qdarkstyle = None
+
+try:
+    import qtawesome as qta
+except ImportError:
+    qta = None
+
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPropertyAnimation,
+    QSettings,
+    QSize,
+    Qt,
+)
+from PySide6.QtGui import QAction, QCloseEvent, QFont, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizeGrip,
     QSizePolicy,
     QSpacerItem,
     QStackedWidget,
+    QStatusBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -31,24 +55,31 @@ os.environ["QT_FONT_DPI"] = "96"
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
+from gui.app_window import AppWindow
 from gui.batch_tab import BatchTab
 from gui.compression_tab import CompressionTab
 from gui.extraction_tab import ExtractionTab
-
-# Import GUI modules
 from gui.home_tab import HomeTab
 from gui.settings_tab import SettingsTab
 from gui.theme_tab import ThemeTab
-from gui.title_bar import TitleBar
+from gui.tools_tab import ToolsTab
 from modules.app_settings import AppSettings
-from modules.theme_config import ThemeConfig
 
-# Import local modules
-from modules.ui_functions import apply_theme, load_svg_icon  # Removed resize_grips
+# Import or create fallback for load_svg_icon function
+try:
+    from modules.ui_functions import load_svg_icon
+except ImportError:
+
+    def load_svg_icon(name: str, size: int = 24, color_hex: str = "#ffffff") -> QIcon:  # type: ignore[misc]
+        """Fallback function for missing load_svg_icon."""
+        return QIcon()  # Return empty icon
+
 
 # Global settings
 SETTINGS = AppSettings()  # Initialize globally
-THEME_CONFIG = None
+
+# Global variable to store available QtAwesome icons
+AVAILABLE_QTA_ICONS = {}
 
 
 class MainWindow(QMainWindow):
@@ -62,89 +93,442 @@ class MainWindow(QMainWindow):
         """Initialize the main window."""
         super().__init__()
 
+        # --- Mypy Type Hint Declarations ---
+        # Note: title_bar removed - using native window controls
+        self.central_widget: Optional[QWidget] = None
+        self.main_layout: Optional[QHBoxLayout] = (
+            None  # Simplified to horizontal layout
+        )
+        self.left_menu_bg: Optional[QFrame] = None  # Corresponds to Mypy's 'sidebar'
+        self.left_menu_layout: Optional[QVBoxLayout] = None
+        self.top_menu: Optional[QFrame] = None
+        self.top_menu_layout: Optional[QVBoxLayout] = None
+        self.stacked_widget: Optional[QStackedWidget] = None
+        self.home_tab: Optional[HomeTab] = None
+        self.compression_tab: Optional[CompressionTab] = None
+        self.extraction_tab: Optional[ExtractionTab] = None
+        self.batch_tab: Optional[BatchTab] = None
+        self.settings_tab: Optional[SettingsTab] = None  # For the settings UI/page
+        self.theme_tab: Optional[ThemeTab] = None  # For the theme UI/page
+        self.tools_tab: Optional[ToolsTab] = None
+
+        self.status_bar: Optional[QStatusBar] = None
+        self.status_label: Optional[QLabel] = None
+        self.status_grip: Optional[QSizeGrip] = None
+
+        self.sidebar_toggle_btn: Optional[QPushButton] = None
+        # For buttons like self.btn_home, if they are accessed outside setup_ui and cause errors:
+        self.btn_home: Optional[QPushButton] = None
+        self.btn_compress: Optional[QPushButton] = None
+        self.btn_extract: Optional[QPushButton] = None
+        self.btn_batch: Optional[QPushButton] = None
+        self.btn_tools: Optional[QPushButton] = None
+        self.btn_settings: Optional[QPushButton] = None
+        self.btn_theme: Optional[QPushButton] = None
+        self.toggle_button: Optional[QPushButton] = (
+            None  # Common name for sidebar toggle
+        )
+
+        self.settings_dialog: Optional[SettingsTab] = (
+            None  # If settings is a dialog opened from here
+        )
+        self.app_settings: AppSettings = SETTINGS  # Explicitly type and assign
+        self.update_checker: Optional[Any] = None
+        self.update_dialog: Optional[Any] = None  # Or QDialog if it's a simple dialog
+        # --- End Mypy Type Hint Declarations ---
+
         # Initialize settings
-        global SETTINGS, THEME_CONFIG
-        # SETTINGS = AppSettings() # Removed, now initialized globally
         SETTINGS.set("logging", "enabled", True)
         SETTINGS.set("logging", "log_level", "DEBUG")
+
+        # Initialize QSettings for cross-platform configuration
+        self.qt_settings = QSettings("RetroClamp", "RetroClamp")
 
         # Initialize the DebugLogger with the loaded settings
         from core.debug_logger import get_logger
 
         self.logger = get_logger(SETTINGS)
         if self.logger:
-            self.logger.info("main", "DebugLogger initialized with AppSettings.")
+            self.logger.info("main", "RetroClamp started with QDarkStyleSheet theming.")
 
-        THEME_CONFIG = ThemeConfig()
-
-        # Load theme
-        theme_name = SETTINGS.get("general", "theme", "dracula")
-        self.theme_config = THEME_CONFIG.load_theme(theme_name)
-
-        # If theme loading failed, use a default theme
-        if self.theme_config is None:
-            self.theme_config = {
-                "colors": {
-                    "primary": "#bd93f9",
-                    "secondary": "#ff79c6",
-                    "accent": "#8be9fd",
-                    "background": "#282a36",
-                    "secondaryBackground": "#44475a",
-                    "tertiaryBackground": "#6272a4",
-                    "text": "#f8f8f2",
-                    "secondaryText": "#d8d8d2",
-                    "disabledText": "#6272a4",
-                    "success": "#50fa7b",
-                    "warning": "#ffb86c",
-                    "error": "#ff5555",
-                    "info": "#8be9fd",
-                }
-            }
-
-        # Set up window properties
+        # Set up window properties (simplified - using native window controls)
         self.setWindowTitle("RetroClamp")
-        self.setWindowIcon(QIcon("resources/icon.ico"))
-        self.setMinimumSize(800, 600)  # Explicitly set a smaller minimum window size
+        # Use QtAwesome icon if available, otherwise fallback
+        if qta:
+            try:
+                self.setWindowIcon(qta.icon("fa6s.compact-disc"))
+            except Exception:
+                self.setWindowIcon(QIcon("resources/icon.ico"))
+        else:
+            self.setWindowIcon(QIcon("resources/icon.ico"))
+        self.setMinimumSize(800, 600)
         self.resize(1200, 800)
 
-        # Set proper window flags to enable frameless window with resizing
-        flags = self.windowFlags()
-        # Remove all window decoration flags to customize window appearance
-        flags &= ~Qt.WindowType.WindowTitleHint
-        flags &= ~Qt.WindowType.WindowSystemMenuHint
-        # Enable frameless window but keep resizing capability
-        flags |= Qt.WindowType.FramelessWindowHint
-        # Add back only the specific flags we need for minimize, maximize, close
-        flags |= (
-            Qt.WindowType.WindowMinimizeButtonHint
-            | Qt.WindowType.WindowMaximizeButtonHint
-            | Qt.WindowType.WindowCloseButtonHint
-        )
-        self.setWindowFlags(flags)
+        # Use native window controls (no custom frameless window)
 
-        # Set up UI
+        # Set up platform-specific integration
+        self.setup_platform_integration()
+
+        # Set up UI (simplified - no custom theme application needed)
         self.setup_ui()
         self.connect_signals()
 
-        # Apply theme
-        apply_theme(self, self.theme_config)
+        # Restore window state
+        self.restore_window_state()
 
-        # Initialize state flags for event handling
-        self._resizing = False
-        self._dragging = False
+        # Note: Window will be shown by main() function
 
-        # Install event filter on the title bar for dragging (must be after setup_ui)
-        if hasattr(self, "title_bar"):
-            self.title_bar.installEventFilter(self)
-        else:
-            if self.logger:  # DIAGNOSTIC
-                self.logger.warning(
-                    "main.__init__",
-                    "self.title_bar not found after setup_ui. Dragging will not work.",
+    def get_best_icon(self, icon_candidates):
+        """Get the best available icon from a list of candidates."""
+        for icon_name in icon_candidates:
+            if icon_name in AVAILABLE_QTA_ICONS:
+                print(
+                    f"📋 DEBUG: Selected '{icon_name}' from candidates {icon_candidates}"
                 )
+                return icon_name
+        # Return first candidate as fallback if none found in QtAwesome
+        fallback = icon_candidates[0] if icon_candidates else "fa5s.circle"
+        print(
+            f"📋 DEBUG: No QtAwesome match for {icon_candidates}, using fallback '{fallback}'"
+        )
+        return fallback
 
-        # Show the window - moved after filter installation and flag init
-        self.show()
+    def initialize_qtawesome(self):
+        """Initialize QtAwesome fonts and verify they're working."""
+        if not qta:
+            if self.logger:
+                self.logger.warning("main", "QtAwesome not available")
+            return
+
+        try:
+            print("🔍 DEBUG: Initializing QtAwesome fonts...")
+
+            # Force QtAwesome to load fonts by requesting an icon
+            qta.icon("fa5s.home")
+
+            # Check if initialization worked
+            if hasattr(qta, "_instance") and qta._instance():
+                instance = qta._instance()
+                if hasattr(instance, "charmap") and instance.charmap:
+                    charmap_size = len(instance.charmap)
+                    print(f"✅ DEBUG: QtAwesome initialized with {charmap_size} icons")
+
+                    # Check available prefixes
+                    prefixes = set()
+                    for key in list(instance.charmap.keys())[:100]:
+                        if "." in key:
+                            prefix = key.split(".")[0]
+                            prefixes.add(prefix)
+                    print(f"✅ DEBUG: Available prefixes: {sorted(prefixes)}")
+
+                    # Store available prefixes for later use
+                    self.available_icon_prefixes = prefixes
+
+                    if self.logger:
+                        self.logger.info(
+                            "main",
+                            f"QtAwesome initialized with prefixes: {sorted(prefixes)}",
+                        )
+                else:
+                    print("❌ DEBUG: QtAwesome charmap is empty")
+                    self.available_icon_prefixes = set()
+            else:
+                print("❌ DEBUG: QtAwesome instance not created")
+                self.available_icon_prefixes = set()
+
+        except Exception as e:
+            print(f"❌ DEBUG: QtAwesome initialization failed: {e}")
+            self.available_icon_prefixes = set()
+            if self.logger:
+                self.logger.error("main", f"QtAwesome initialization failed: {e}")
+
+    def create_toggle_icon(self, direction: str) -> QIcon:
+        """Create a toggle icon (chevron) using simple drawing that matches Tabler icon colors."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+
+        size = 32
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Use high contrast white for WCAG AAA compliance
+        # 21:1 contrast ratio against dark backgrounds
+        pen = QPen(
+            QColor("#ffffff"),
+            2,
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+            Qt.PenJoinStyle.RoundJoin,
+        )
+        painter.setPen(pen)
+
+        center_x, center_y = size // 2, size // 2
+
+        if direction == "right":
+            # Right-pointing chevron
+            points = [
+                QPoint(center_x - 6, center_y - 8),
+                QPoint(center_x + 6, center_y),
+                QPoint(center_x - 6, center_y + 8),
+            ]
+        else:  # left
+            # Left-pointing chevron
+            points = [
+                QPoint(center_x + 6, center_y - 8),
+                QPoint(center_x - 6, center_y),
+                QPoint(center_x + 6, center_y + 8),
+            ]
+
+        # Draw the chevron lines
+        painter.drawLine(points[0], points[1])
+        painter.drawLine(points[1], points[2])
+
+        painter.end()
+        return QIcon(pixmap)
+
+    def load_tabler_icon(self, icon_name: str) -> QIcon:
+        """Load a Tabler SVG icon from the resources directory."""
+        # Map button names to available Tabler icons
+        tabler_icon_map = {
+            "Home": "home.svg",
+            "Compress": "file-zip.svg",
+            "Extract": "file-export.svg",
+            "Tools": "tool.svg",
+            "Theme": "file-plus.svg",  # Use file-plus as alternative for theme
+            "Settings": "disc.svg",  # Use disc as alternative for settings
+            "Hide": "chevron-left",  # Use custom chevron instead of menu-2.svg
+        }
+
+        svg_filename = tabler_icon_map.get(icon_name, "home.svg")
+
+        # Handle special case for chevron icons
+        if svg_filename.startswith("chevron-"):
+            direction = svg_filename.split("-")[1]  # "left" or "right"
+            print(f"✅ DEBUG: Creating custom chevron icon: {direction}")
+            return self.create_toggle_icon(direction)
+
+        # Try multiple locations for the SVG file
+        possible_paths = [
+            f"resources/icons/tabler-icons-svg/{svg_filename}",
+            f"resources/icons/tabler-icons/icons/outline/{svg_filename}",
+            f"resources/icons/tabler-icons/icons/filled/{svg_filename.replace('.svg', '')}.svg",
+        ]
+
+        for svg_path in possible_paths:
+            if os.path.exists(svg_path):
+                print(f"✅ DEBUG: Found Tabler icon at {svg_path}")
+                return QIcon(svg_path)
+
+        # If no SVG found, create a simple fallback
+        print(f"⚠️ DEBUG: No Tabler icon found for '{icon_name}', using fallback")
+        return self.create_simple_fallback_icon(icon_name)
+
+    def create_simple_fallback_icon(self, text: str) -> QIcon:
+        """Create a simple fallback icon when SVG isn't found."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap
+
+        size = 32
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw simple colored square
+        color = QColor("#bd93f9")
+        painter.setBrush(QBrush(color))
+        painter.setPen(QPen(color, 1))
+        painter.drawRoundedRect(4, 4, size - 8, size - 8, 4, 4)
+
+        # Draw letter
+        painter.setPen(QPen(QColor("#f8f8f2")))
+        font = QFont("Segoe UI", 12, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text[0].upper())
+
+        painter.end()
+        return QIcon(pixmap)
+
+    def create_nav_button(self, text: str, icon_name: str) -> QPushButton:
+        """Create a navigation button using existing Tabler SVG icons."""
+        btn = QPushButton(text)
+        btn.setObjectName(f"btn_{text.lower()}")
+
+        print(f"🔍 DEBUG: Creating button '{text}' with Tabler SVG icons")
+
+        # Load Tabler SVG icon from resources
+        icon = self.load_tabler_icon(text)
+        btn.setIcon(icon)
+
+        print(f"✅ DEBUG: Loaded icon for '{text}'")
+
+        btn.setIconSize(QSize(36, 36))  # Larger icons for better visibility
+        btn.setMinimumHeight(56)  # WCAG minimum touch target size
+        btn.setFont(
+            QFont("Segoe UI", 12, QFont.Weight.Medium)
+        )  # Larger, accessible font
+        return btn
+
+    def setup_platform_integration(self):
+        """Set up platform-specific integration features."""
+        current_platform = platform.system()
+
+        if current_platform == "Darwin":  # macOS
+            self.setup_macos_integration()
+        elif current_platform == "Windows":
+            self.setup_windows_integration()
+        elif current_platform == "Linux":
+            self.setup_linux_integration()
+
+    def setup_macos_integration(self):
+        """Set up macOS-specific features."""
+        # Enable native macOS global menu bar
+        self.menuBar().setNativeMenuBar(True)
+
+        # Set up macOS-style menu structure
+        self.setup_macos_menus()
+
+        if self.logger:
+            self.logger.info("main", "macOS integration enabled: global menu bar")
+
+    def setup_windows_integration(self):
+        """Set up Windows-specific features."""
+        # Windows keeps menu bar in window (default Qt behavior)
+        self.menuBar().setNativeMenuBar(False)
+
+        # Set up standard Windows menu structure
+        self.setup_standard_menus()
+
+        if self.logger:
+            self.logger.info("main", "Windows integration enabled: in-window menu bar")
+
+    def setup_linux_integration(self):
+        """Set up Linux-specific features."""
+        # Linux uses window menu bar (default Qt behavior)
+        self.menuBar().setNativeMenuBar(False)
+
+        # Set up standard menu structure
+        self.setup_standard_menus()
+
+        if self.logger:
+            self.logger.info("main", "Linux integration enabled: in-window menu bar")
+
+    def setup_macos_menus(self):
+        """Set up macOS-style menu structure with proper Preferences placement."""
+        # File menu
+        file_menu = self.menuBar().addMenu("&File")
+
+        # Determine modifier key for current platform
+        modifier = (
+            Qt.MetaModifier if platform.system() == "Darwin" else Qt.ControlModifier
+        )
+
+        open_action = QAction("&Open...", self)
+        open_action.setShortcut(QKeySequence(modifier | Qt.Key_O))
+        open_action.triggered.connect(self.open_file_dialog)
+        file_menu.addAction(open_action)
+
+        file_menu.addSeparator()
+
+        quit_action = QAction("&Quit RetroClamp", self)
+        quit_action.setShortcut(QKeySequence(modifier | Qt.Key_Q))
+        quit_action.triggered.connect(self.close)
+        file_menu.addAction(quit_action)
+
+        # View menu
+        view_menu = self.menuBar().addMenu("&View")
+
+        refresh_action = QAction("&Refresh", self)
+        refresh_action.setShortcut(QKeySequence.Refresh)
+        refresh_action.triggered.connect(self.refresh_current_view)
+        view_menu.addAction(refresh_action)
+
+        toggle_sidebar_action = QAction("&Toggle Sidebar", self)
+        toggle_sidebar_action.setShortcut(QKeySequence(modifier | Qt.Key_B))
+        toggle_sidebar_action.triggered.connect(self.toggle_menu)
+        view_menu.addAction(toggle_sidebar_action)
+
+        # Help menu
+        help_menu = self.menuBar().addMenu("&Help")
+
+        help_action = QAction("&RetroClamp Help", self)
+        help_action.setShortcut(QKeySequence.HelpContents)
+        help_action.triggered.connect(self.show_help)
+        help_menu.addAction(help_action)
+
+        about_action = QAction("&About RetroClamp", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+        # On macOS, Preferences will automatically move to the app menu
+        # But we still add it to a menu for other platforms
+        if platform.system() == "Darwin":
+            # Add preferences to the application menu (handled automatically by Qt)
+            prefs_action = QAction("Preferences...", self)
+            prefs_action.setMenuRole(QAction.PreferencesRole)
+            prefs_action.setShortcut(QKeySequence(Qt.MetaModifier | Qt.Key_Comma))
+            prefs_action.triggered.connect(lambda: self.change_page(self.settings_page))
+            # Add to any menu - Qt will move it to the app menu automatically
+            file_menu.addAction(prefs_action)
+
+    def setup_standard_menus(self):
+        """Set up standard menu structure for Windows/Linux."""
+        # File menu
+        file_menu = self.menuBar().addMenu("&File")
+
+        # Determine modifier key for current platform
+        modifier = (
+            Qt.MetaModifier if platform.system() == "Darwin" else Qt.ControlModifier
+        )
+
+        open_action = QAction("&Open...", self)
+        open_action.setShortcut(QKeySequence(modifier | Qt.Key_O))
+        open_action.triggered.connect(self.open_file_dialog)
+        file_menu.addAction(open_action)
+
+        file_menu.addSeparator()
+
+        # Preferences in File menu for Windows/Linux
+        prefs_action = QAction("&Preferences...", self)
+        prefs_action.setShortcut(QKeySequence(modifier | Qt.Key_Comma))
+        prefs_action.triggered.connect(lambda: self.change_page(self.settings_page))
+        file_menu.addAction(prefs_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QAction("E&xit", self)
+        exit_action.setShortcut(QKeySequence(modifier | Qt.Key_Q))
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # View menu
+        view_menu = self.menuBar().addMenu("&View")
+
+        refresh_action = QAction("&Refresh", self)
+        refresh_action.setShortcut(QKeySequence.Refresh)
+        refresh_action.triggered.connect(self.refresh_current_view)
+        view_menu.addAction(refresh_action)
+
+        toggle_sidebar_action = QAction("&Toggle Sidebar", self)
+        toggle_sidebar_action.setShortcut(QKeySequence(modifier | Qt.Key_B))
+        toggle_sidebar_action.triggered.connect(self.toggle_menu)
+        view_menu.addAction(toggle_sidebar_action)
+
+        # Help menu
+        help_menu = self.menuBar().addMenu("&Help")
+
+        help_action = QAction("&RetroClamp Help", self)
+        help_action.setShortcut(QKeySequence.HelpContents)
+        help_action.triggered.connect(self.show_help)
+        help_menu.addAction(help_action)
+
+        about_action = QAction("&About RetroClamp", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
 
     def setup_ui(self):
         """Set up the user interface."""
@@ -152,20 +536,10 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
-        # Main layout - vertical layout to stack title bar above content
-        self.main_layout = QVBoxLayout(self.central_widget)
+        # Main layout (simplified - no custom title bar needed)
+        self.main_layout = QHBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
-
-        # Add custom title bar for window dragging and controls
-        self.title_bar = TitleBar(self, self.theme_config)
-        self.main_layout.addWidget(self.title_bar)
-
-        # Main content layout (horizontal): sidebar menu and main content area
-        self.main_content_layout = QHBoxLayout()
-        self.main_content_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_content_layout.setSpacing(0)
-        self.main_layout.addLayout(self.main_content_layout)
 
         # Sidebar (left menu) background frame
         self.left_menu_bg = QFrame()
@@ -191,100 +565,40 @@ class MainWindow(QMainWindow):
         self.top_menu_layout.setContentsMargins(0, 0, 0, 0)
         self.top_menu_layout.setSpacing(0)
 
-        # Top menu buttons
-        self.btn_home = QPushButton("Home")
-        self.btn_home.setObjectName("btn_home")
-        self.btn_home.setProperty("icon_name", "home")
-        icon = load_svg_icon("home", 32, "#f8f8f2")
-        self.btn_home.setIcon(icon)
-        self.btn_home.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT FOR BETTER VERTICAL RESIZING
-        self.btn_home.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_home.setFont(QFont("Segoe UI", 11))
-        self.btn_home.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        # Top menu buttons - use best available icons
+        self.btn_home = self.create_nav_button(
+            "Home", self.get_best_icon(["fa5s.home", "fa5s.house"])
         )
         self.top_menu_layout.addWidget(self.btn_home)
 
-        self.btn_compress = QPushButton("Compress")
-        self.btn_compress.setObjectName("btn_compress")
-        self.btn_compress.setProperty("icon_name", "file-zip")
-        icon = load_svg_icon("file-zip", 32, "#f8f8f2")
-        self.btn_compress.setIcon(icon)
-        self.btn_compress.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.btn_compress.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_compress.setFont(QFont("Segoe UI", 11))
-        self.btn_compress.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        self.btn_compress = self.create_nav_button(
+            "Compress",
+            self.get_best_icon(
+                ["fa5s.file-archive", "fa5s.compress", "fa5s.folder-open"]
+            ),
         )
         self.top_menu_layout.addWidget(self.btn_compress)
 
-        self.btn_extract = QPushButton("Extract")
-        self.btn_extract.setObjectName("btn_extract")
-        self.btn_extract.setProperty("icon_name", "file-export")
-        icon = load_svg_icon("file-export", 32, "#f8f8f2")
-        self.btn_extract.setIcon(icon)
-        self.btn_extract.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.btn_extract.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_extract.setFont(QFont("Segoe UI", 11))
-        self.btn_extract.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        self.btn_extract = self.create_nav_button(
+            "Extract",
+            self.get_best_icon(["fa5s.file-export", "fa5s.download", "fa5s.upload"]),
         )
         self.top_menu_layout.addWidget(self.btn_extract)
 
-        self.btn_tools = QPushButton("Tools")
-        self.btn_tools.setObjectName("btn_tools")
-        self.btn_tools.setProperty("icon_name", "tool")
-        icon = load_svg_icon("tool", 32, "#f8f8f2")
-        self.btn_tools.setIcon(icon)
-        self.btn_tools.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.btn_tools.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_tools.setFont(QFont("Segoe UI", 11))
-        self.btn_tools.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        self.btn_tools = self.create_nav_button(
+            "Tools", self.get_best_icon(["fa5s.wrench", "fa5s.tools", "fa5s.cog"])
         )
         self.top_menu_layout.addWidget(self.btn_tools)
 
-        self.btn_theme = QPushButton("Theme")
-        self.btn_theme.setObjectName("btn_theme")
-        self.btn_theme.setProperty("icon_name", "palette")
-        icon = load_svg_icon("palette", 32, "#f8f8f2")
-        self.btn_theme.setIcon(icon)
-        self.btn_theme.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.btn_theme.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_theme.setFont(QFont("Segoe UI", 11))
-        self.btn_theme.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        self.btn_theme = self.create_nav_button(
+            "Theme",
+            self.get_best_icon(["fa5s.palette", "fa5s.paint-brush", "fa5s.brush"]),
         )
         self.top_menu_layout.addWidget(self.btn_theme)
 
         # Menu spacer (this handles the vertical expansion/contraction between sections)
         self.menu_spacer = QSpacerItem(
-            20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding
+            20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
         )
 
         # Bottom menu
@@ -298,52 +612,65 @@ class MainWindow(QMainWindow):
         self.bottom_menu_layout.setContentsMargins(0, 0, 0, 0)
         self.bottom_menu_layout.setSpacing(0)
 
-        # Bottom menu buttons
-        self.btn_settings = QPushButton("Settings")
-        self.btn_settings.setObjectName("btn_settings")
-        self.btn_settings.setProperty("icon_name", "settings")
-        icon = load_svg_icon("settings", 32, "#f8f8f2")
-        self.btn_settings.setIcon(icon)
-        self.btn_settings.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.btn_settings.setMinimumHeight(45)  # Changed from 60
-
-        self.btn_settings.setFont(QFont("Segoe UI", 11))
-        self.btn_settings.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        # Bottom menu buttons with best available icons
+        self.btn_settings = self.create_nav_button(
+            "Settings", self.get_best_icon(["fa5s.cog", "fa5s.gear", "fa5s.wrench"])
         )
         self.bottom_menu_layout.addWidget(self.btn_settings)
 
-        # Toggle button
-        self.toggle_button = QPushButton("Hide")
-        self.toggle_button.setObjectName("toggleButton")
-        self.toggle_button.setProperty("icon_name", "menu-2")
-        icon = load_svg_icon("menu-2", 32, "#f8f8f2")
-        self.toggle_button.setIcon(icon)
-        self.toggle_button.setIconSize(QSize(32, 32))
-        # REDUCED BUTTON HEIGHT
-        self.toggle_button.setMinimumHeight(45)  # Changed from 60
-
-        self.toggle_button.setFont(QFont("Segoe UI", 11))
-        self.toggle_button.setStyleSheet(
-            """
-            text-align: left;
-            padding-left: 16px;
-        """
+        # Toggle button with best available icon
+        self.toggle_button = self.create_nav_button(
+            "Hide", self.get_best_icon(["fa5s.chevron-left", "fa5s.arrow-left"])
         )
+        self.toggle_button.setObjectName("toggleButton")
+        # Ensure toggle button has consistent styling
+        self.toggle_button.setMaximumHeight(45)
+        self.toggle_button.setMinimumHeight(45)
 
-        # Store nav buttons and their labels for collapse/expand
+        # Store nav buttons with their labels and track which have icons vs Unicode fallbacks
         self.nav_buttons = [
-            (self.btn_home, "Home"),
-            (self.btn_compress, "Compress"),
-            (self.btn_extract, "Extract"),
-            (self.btn_tools, "Tools"),
-            (self.btn_theme, "Theme"),
-            (self.btn_settings, "Settings"),
-            (self.toggle_button, "Hide"),  # Add toggle button to the list
+            (
+                self.btn_home,
+                "Home",
+                self.btn_home.text(),
+                not self.btn_home.icon().isNull(),
+            ),
+            (
+                self.btn_compress,
+                "Compress",
+                self.btn_compress.text(),
+                not self.btn_compress.icon().isNull(),
+            ),
+            (
+                self.btn_extract,
+                "Extract",
+                self.btn_extract.text(),
+                not self.btn_extract.icon().isNull(),
+            ),
+            (
+                self.btn_tools,
+                "Tools",
+                self.btn_tools.text(),
+                not self.btn_tools.icon().isNull(),
+            ),
+            (
+                self.btn_theme,
+                "Theme",
+                self.btn_theme.text(),
+                not self.btn_theme.icon().isNull(),
+            ),
+            (
+                self.btn_settings,
+                "Settings",
+                self.btn_settings.text(),
+                not self.btn_settings.icon().isNull(),
+            ),
+            (
+                self.toggle_button,
+                "Hide",
+                self.toggle_button.text(),
+                not self.toggle_button.icon().isNull(),
+            ),
         ]
 
         # Add widgets to left menu layout
@@ -392,29 +719,7 @@ class MainWindow(QMainWindow):
         self.compression_page.setDocumentMode(True)  # More compact appearance
         self.compression_page.setUsesScrollButtons(False)  # Disable scroll buttons
 
-        # Add the same tab styling as in settings_tab.py
-        self.compression_page.setStyleSheet(
-            """
-            QTabBar::tab {
-                padding: 8px 16px;
-                margin-right: 2px;
-                border: 1px solid #444;
-                border-bottom: none;
-                border-radius: 4px 4px 0 0;
-                background: #333;
-                color: #ccc;
-            }
-            QTabBar::tab:selected {
-                background: #6272a4;           /* active tab highlight */
-                color: #f8f8f2;
-                font-weight: bold;
-            }
-            QTabWidget::pane {
-                border: 1px solid #444;
-                top: -1px;                     /* overlap with tabs */
-            }
-        """
-        )
+        # Remove per-tab stylesheet - using unified global stylesheet instead
 
         # Add single file compression tab
         self.single_file_tab = CompressionTab(app_settings=SETTINGS)
@@ -432,8 +737,6 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.extraction_page)
 
         # Tools page
-        from gui.tools_tab import ToolsTab
-
         self.tools_page = ToolsTab()
         self.pages.addWidget(self.tools_page)
 
@@ -455,46 +758,17 @@ class MainWindow(QMainWindow):
         # Add content widget to content area layout
         self.content_area_layout.addWidget(self.content)
 
-        # Create a custom resize handle with an icon that matches the application style
-        # MAKE RESIZE HANDLE CHILD OF CENTRAL_WIDGET FOR CORRECT POSITIONING
-        self.resize_handle = QPushButton(self.central_widget)  # Changed parent here
-        self.resize_handle.setObjectName("resizeHandle")
-        self.resize_handle.setFixedSize(16, 16)
-        self.resize_handle.setFlat(True)
-        # self.resize_handle.setText("R") # DIAGNOSTIC: Set text to see if button appears - REMOVED
+        # Note: Custom resize handle removed - using native window controls
 
-        # Use the provided SVG icon
-        colors = self.theme_config.get("colors", {})
-        text_color = colors.get("text", "#f8f8f2")
-        icon = load_svg_icon("resize_icon_exact", 16, text_color)
-        self.resize_handle.setIcon(icon)
-        self.resize_handle.setIconSize(QSize(16, 16))
-
-        # DIAGNOSTIC: Use a theme color for background instead of fully transparent
-        bg_color = self.theme_config.get("colors", {}).get(
-            "secondaryBackground", "#44475a"
-        )
-        hover_bg_color = "rgba(255, 255, 255, 0.1)"  # Keep hover distinct
-        self.resize_handle.setStyleSheet(
-            f"#resizeHandle {{ background-color: {bg_color}; border: none; }}"
-            f"#resizeHandle:hover {{ background-color: {hover_bg_color}; }}"
-        )
-        self.resize_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
-
-        # Install event filter to handle mouse events for resizing
-        self.resize_handle.installEventFilter(self)
-        if self.logger:  # DIAGNOSTIC
-            self.logger.info(
-                "main.setup_ui",
-                "Resize handle created, text set to 'R', and event filter installed.",
-            )  # DIAGNOSTIC
-
-        # Add widgets to main content layout
-        self.main_content_layout.addWidget(self.left_menu_bg)
-        self.main_content_layout.addWidget(self.content_area)
+        # Add widgets to main layout (simplified)
+        self.main_layout.addWidget(self.left_menu_bg)
+        self.main_layout.addWidget(self.content_area)
 
         # Set initial page
         self.pages.setCurrentWidget(self.home_page)
+
+        # Set up additional keyboard shortcuts for navigation
+        self.setup_keyboard_shortcuts()
 
     def connect_signals(self):
         """Connect widget signals to slots."""
@@ -527,14 +801,11 @@ class MainWindow(QMainWindow):
             )
 
     def change_page(self, page):
-        """Change the current page."""
+        """Change the current page (simplified - no custom theming needed)."""
         # Set current page
         self.pages.setCurrentWidget(page)
 
-        # Check if sidebar is collapsed
-        collapsed = self.left_menu_bg.width() <= self.collapsed_width
-
-        # Update selected button
+        # Simple button state management (QDarkStyleSheet handles styling)
         buttons = [
             self.btn_home,
             self.btn_compress,
@@ -557,48 +828,17 @@ class MainWindow(QMainWindow):
         # Get button for current page
         selected_button = page_to_button.get(page)
 
-        # Reset all buttons
+        # Reset all buttons (let QDarkStyleSheet handle styling)
         for button in buttons:
-            button.setProperty("selected", "false")
+            button.setProperty("selected", False)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
-            # Apply appropriate styling based on collapsed state
-            if collapsed:
-                button.setStyleSheet("text-align: center;")
-                button.setIconSize(QSize(48, 48))
-            else:
-                button.setStyleSheet("padding-left: 16px; text-align: left;")
-                button.setIconSize(QSize(32, 32))
-
-            # Update icon color
-            icon_name = button.property("icon_name")
-            if icon_name:
-                button.setIcon(load_svg_icon(icon_name, 24, "#f8f8f2"))
-
-        # Select the button
+        # Select the current button
         if selected_button:
-            selected_button.setProperty("selected", "true")
-
-            # Get theme colors
-            colors = self.theme_config.get("colors", {})
-            primary = colors.get("primary", "#bd93f9")
-            background = colors.get("background", "#282a36")
-
-            # Apply appropriate styling based on collapsed state
-            if collapsed:
-                selected_button.setStyleSheet(
-                    f"background-color: {primary}; color: {background};"
-                    " text-align: center;"
-                )
-            else:
-                selected_button.setStyleSheet(
-                    f"background-color: {primary}; color: {background};"
-                    " padding-left: 16px; text-align: left;"
-                )
-
-            # Update icon color
-            icon_name = selected_button.property("icon_name")
-            if icon_name:
-                selected_button.setIcon(load_svg_icon(icon_name, 24, background))
+            selected_button.setProperty("selected", True)
+            selected_button.style().unpolish(selected_button)
+            selected_button.style().polish(selected_button)
 
     def toggle_menu(self):
         """Toggle the left menu between expanded and collapsed states."""
@@ -612,18 +852,57 @@ class MainWindow(QMainWindow):
 
         # When target is collapsed, set text empty and adjust icon sizes for all buttons
         if target_width == min_width:
-            for btn, _ in self.nav_buttons:
-                btn.setText("")  # Remove text when collapsing
-                btn.setIconSize(QSize(48, 48))  # Larger icons in collapsed mode
-                btn.setStyleSheet("text-align: center;")  # Center align icons
+            for btn, label, original_text, has_icon in self.nav_buttons:
+                if has_icon:
+                    # For buttons with real icons, remove text completely
+                    btn.setText("")
+                else:
+                    # For buttons with Unicode fallbacks, keep only the emoji
+                    # Extract emoji from text like "🏠 Home" -> "🏠"
+                    if " " in original_text:
+                        emoji = original_text.split(" ")[0]
+                        btn.setText(emoji)
+                    else:
+                        # Fallback if no space found
+                        btn.setText(original_text[0] if original_text else "●")
+
+                # Set consistent styling for collapsed mode
+                if btn == self.toggle_button:
+                    # Special handling for toggle button to prevent oversizing
+                    btn.setIconSize(QSize(24, 24))
+                    btn.setStyleSheet(
+                        "text-align: center; font-size: 16px; max-height: 45px;"
+                    )
+                else:
+                    btn.setIconSize(QSize(32, 32))  # Standard collapsed icon size
+                    btn.setStyleSheet(
+                        "text-align: center; font-size: 18px;"
+                    )  # Center align icons
+                btn.setToolTip(label)  # Show label as tooltip when collapsed
+            # Change toggle button to "expand" icon
+            expand_icon = self.create_toggle_icon("right")
+            self.toggle_button.setIcon(expand_icon)
+            self.toggle_button.setToolTip("Expand Menu")
+            print("✅ DEBUG: Set toggle button to expand (right chevron)")
         else:
-            # When expanding, restore text and standard icon size
-            for btn, label in self.nav_buttons:
-                btn.setText(label)  # Restore text
+            # When expanding, restore original text and standard icon size
+            for btn, label, original_text, has_icon in self.nav_buttons:
+                if has_icon:
+                    # For buttons with real icons, restore clean text
+                    btn.setText(label)
+                else:
+                    # For buttons with Unicode fallbacks, restore original text with emoji
+                    btn.setText(original_text)
                 btn.setIconSize(QSize(32, 32))  # Standard icon size
                 btn.setStyleSheet(
-                    "padding-left: 16px; text-align: left;"
+                    "padding-left: 16px; text-align: left; font-size: 11px;"
                 )  # Left align text
+                btn.setToolTip("")  # Clear tooltip when expanded
+            # Change toggle button to "collapse" icon
+            collapse_icon = self.create_toggle_icon("left")
+            self.toggle_button.setIcon(collapse_icon)
+            self.toggle_button.setToolTip("Hide Menu")
+            print("✅ DEBUG: Set toggle button to collapse (left chevron)")
 
         # Create minimum width animation
         self.animation_min = QPropertyAnimation(self.left_menu_bg, b"minimumWidth")
@@ -646,176 +925,146 @@ class MainWindow(QMainWindow):
         # The _update_nav_button_states is now integrated into the toggle_menu logic
         # We don't need to connect finished signal if text/icon updates are done upfront
 
-    def toggle_maximize(self):
-        """Toggle between maximized and normal window state."""
-        if self.isMaximized():
-            self.showNormal()
-            self.maximize_btn.setIcon(load_svg_icon("square", 16, "#f8f8f2"))
-        else:
-            self.showMaximized()
-            self.maximize_btn.setIcon(load_svg_icon("copy", 16, "#f8f8f2"))
+    def setup_keyboard_shortcuts(self):
+        """Set up platform-appropriate keyboard shortcuts."""
+        # Determine modifier key for current platform
+        modifier = (
+            Qt.MetaModifier if platform.system() == "Darwin" else Qt.ControlModifier
+        )
 
-    def showEvent(self, event):
-        """Handle show events."""
-        if self.logger:  # DIAGNOSTIC
-            self.logger.debug("main.showEvent", "showEvent triggered.")  # DIAGNOSTIC
-        self._update_resize_handle_position()
-        super().showEvent(event)
+        # Navigation shortcuts
+        QShortcut(
+            QKeySequence(modifier | Qt.Key_1),
+            self,
+            lambda: self.change_page(self.home_page),
+        )
+        QShortcut(
+            QKeySequence(modifier | Qt.Key_2),
+            self,
+            lambda: self.change_page(self.compression_page),
+        )
+        QShortcut(
+            QKeySequence(modifier | Qt.Key_3),
+            self,
+            lambda: self.change_page(self.extraction_page),
+        )
+        QShortcut(
+            QKeySequence(modifier | Qt.Key_4),
+            self,
+            lambda: self.change_page(self.tools_page),
+        )
+        QShortcut(
+            QKeySequence(modifier | Qt.Key_5),
+            self,
+            lambda: self.change_page(self.theme_page),
+        )
 
-    def resizeEvent(self, event):
-        """Handle resize events."""
-        super().resizeEvent(event)  # Restore super call
-        if self.logger:  # DIAGNOSTIC
-            self.logger.debug(
-                "main.resizeEvent", f"resizeEvent triggered. New size: {event.size()}."
-            )  # DIAGNOSTIC
-        self._update_resize_handle_position()
+        # Function key shortcuts
+        QShortcut(QKeySequence(Qt.Key_F1), self, self.show_help)
+        QShortcut(QKeySequence(Qt.Key_F5), self, self.refresh_current_view)
 
-    def _update_resize_handle_position(self):
-        """Update the position of the resize handle to the bottom-right corner."""
-        if hasattr(self, "resize_handle") and hasattr(self, "central_widget"):
-            parent_width = self.central_widget.width()
-            parent_height = self.central_widget.height()
-            handle_width = self.resize_handle.width()
-            handle_height = self.resize_handle.height()
+        if self.logger:
+            platform_name = "Cmd" if platform.system() == "Darwin" else "Ctrl"
+            self.logger.info(
+                "main", f"Keyboard shortcuts configured for {platform_name} key"
+            )
 
-            # Position at the bottom-right corner of the central_widget
-            x = parent_width - handle_width
-            y = parent_height - handle_height
-            self.resize_handle.move(x, y)
-            self.resize_handle.raise_()  # DIAGNOSTIC: Ensure it's on top
-            if self.logger:  # DIAGNOSTIC
-                self.logger.debug(
-                    "main._update_resize_handle_position",
-                    f"Resize handle moved to ({x}, {y}) and raised.",
-                )  # DIAGNOSTIC
-        elif self.logger:
-            self.logger.warning(
-                "main._update_resize_handle_position",
-                "Resize handle or central_widget not found for positioning.",
-            )  # DIAGNOSTIC
+    def open_file_dialog(self):
+        """Open a native file dialog."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open File",
+            "",
+            "All Files (*);;CHD Files (*.chd);;ISO Files (*.iso);;BIN Files (*.bin)",
+        )
 
-    def eventFilter(self, obj, event):
-        """Filter events for objects that have installed an event filter.
+        if file_path:
+            # Switch to compression page and set the file
+            self.change_page(self.compression_page)
+            # TODO: Set the file in the compression tab
+            if self.logger:
+                self.logger.info("main", f"File selected via menu: {file_path}")
 
-        Args:
-            obj: Object that sent the event
-            event: Event object
+    def refresh_current_view(self):
+        """Refresh the current view/page."""
+        current_widget = self.pages.currentWidget()
 
-        Returns:
-            True if the event was handled, False otherwise
-        """
+        # Call refresh method if available on current page
+        if hasattr(current_widget, "refresh"):
+            current_widget.refresh()
+        elif hasattr(current_widget, "reload"):
+            current_widget.reload()
+
+        if self.logger:
+            self.logger.info(
+                "main", f"Refreshed current view: {current_widget.__class__.__name__}"
+            )
+
+    def show_help(self):
+        """Show help dialog or documentation."""
+        QMessageBox.information(
+            self,
+            "RetroClamp Help",
+            "RetroClamp is a modern GUI for CHDMAN operations.\n\n"
+            "Navigation:\n"
+            "• Use the sidebar to switch between different tools\n"
+            "• Ctrl+1-5 (Cmd+1-5 on macOS) for quick navigation\n"
+            "• F1 for help, F5 to refresh\n\n"
+            "For detailed documentation, visit:\n"
+            "https://github.com/Soundchazer2k/Retroclamp",
+        )
+
+    def show_about(self):
+        """Show about dialog."""
+        version = SETTINGS.get("general", "version", "1.2.0-dev")
+        QMessageBox.about(
+            self,
+            "About RetroClamp",
+            f"<h3>RetroClamp {version}</h3>"
+            "<p>A modern, cross-platform GUI for CHDMAN operations.</p>"
+            "<p>Built with PySide6 and QDarkStyleSheet.</p>"
+            "<p>© 2024 RetroClamp Project</p>",
+        )
+
+    def restore_window_state(self):
+        """Restore window size, position, and state from settings."""
         try:
-            # Handle resize handle events
-            if obj == self.resize_handle:
-                if event.type() == event.Type.MouseButtonPress:
-                    self._resize_start_pos = QPoint(
-                        event.globalPosition().x(), event.globalPosition().y()
-                    )
-                    self._resize_start_size = self.size()
-                    self._resizing = True
-                    event.accept()  # Accept event to prevent further processing
-                    return True
-                elif event.type() == event.Type.MouseMove and self._resizing:
-                    current_pos = QPoint(
-                        event.globalPosition().x(), event.globalPosition().y()
-                    )
-                    delta = current_pos - self._resize_start_pos
+            # Restore geometry (size and position)
+            geometry = self.qt_settings.value("window_geometry")
+            if geometry:
+                self.restoreGeometry(geometry)
 
-                    # Calculate raw new dimensions
-                    new_width = self._resize_start_size.width() + delta.x()
-                    new_height = self._resize_start_size.height() + delta.y()
+            # Restore window state (maximized, etc.)
+            window_state = self.qt_settings.value("window_state")
+            if window_state:
+                self.restoreState(window_state)
 
-                    # DIAGNOSTIC LOGGING
-                    if self.logger:
-                        self.logger.debug(
-                            "MainWindow.eventFilter.resize",
-                            f"StartSize: {self._resize_start_size}, Delta: {delta}, "
-                            f"Raw NewSize: ({new_width}, {new_height})",
-                        )
-
-                    # Apply minimum size constraints
-                    min_w = self.minimumWidth()  # From setMinimumSize or default 0
-                    min_h = self.minimumHeight()  # From setMinimumSize or default 0
-
-                    # If min_w/min_h are still 0 (not explicitly set to something > 0),
-                    # then fall back to minimumSizeHint.
-                    if min_w == 0:
-                        min_w = self.minimumSizeHint().width()
-                    if min_h == 0:
-                        min_h = self.minimumSizeHint().height()
-
-                    if self.logger:
-                        self.logger.debug(
-                            "MainWindow.eventFilter",
-                            f"Using effective minimums for constraint: width={min_w}, height={min_h}",
-                        )
-
-                    # Diagnostic prints
-                    constrained_width = max(new_width, min_w)
-                    constrained_height = max(new_height, min_h)
-
-                    # DIAGNOSTIC LOGGING
-                    if self.logger:
-                        self.logger.debug(
-                            "MainWindow.eventFilter.resize",
-                            f"Constrained NewSize: ({constrained_width}, {constrained_height})",
-                        )
-
-                    self.resize(constrained_width, constrained_height)
-                    event.accept()
-                    return True
-                elif event.type() == event.Type.MouseButtonRelease:
-                    self._resizing = False
-                    if hasattr(self, "_resize_start_pos"):
-                        del self._resize_start_pos
-                    # Do not clear _resize_start_size here, it's just a snapshot
-                    event.accept()
-                    return True
-
-            # Handle title bar events for dragging
-            elif obj == self.title_bar:
-                if event.type() == event.Type.MouseButtonPress:
-                    if event.button() == Qt.MouseButton.LeftButton:
-                        self._dragging = True
-                        self._drag_start_position = (
-                            event.globalPosition().toPoint()
-                            - self.frameGeometry().topLeft()
-                        )
-                        event.accept()
-                        return True
-                elif event.type() == event.Type.MouseMove and self._dragging:
-                    self.move(
-                        event.globalPosition().toPoint() - self._drag_start_position
-                    )
-                    event.accept()
-                    return True
-                elif event.type() == event.Type.MouseButtonRelease:
-                    if event.button() == Qt.MouseButton.LeftButton:
-                        self._dragging = False
-                        event.accept()
-                        return True
-        except AttributeError as e:
-            log_msg = f"AttributeError in eventFilter: {e} on object {obj}, event type {event.type()}"
             if self.logger:
-                self.logger.error("MainWindow.eventFilter", log_msg)
-            else:
-                print(log_msg)
-            # For an error loop, returning False might be safer than re-raising
-            # or letting it fall through to super if the error is persistent.
-            return False  # Attempt to break loop by not consuming event if error occurs
+                self.logger.info("main", "Window state restored from settings")
+
         except Exception as e:
-            log_msg = f"Unexpected error in eventFilter: {e} on object {obj}, event type {event.type()}"
             if self.logger:
-                self.logger.error("MainWindow.eventFilter", log_msg)
-            else:
-                print(log_msg)
-            return False  # Attempt to break loop
+                self.logger.warning("main", f"Could not restore window state: {e}")
 
-        # Pass unhandled events to the parent class's event filter
-        return super().eventFilter(obj, event)
+    def save_window_state(self):
+        """Save window size, position, and state to settings."""
+        try:
+            # Save geometry (size and position)
+            self.qt_settings.setValue("window_geometry", self.saveGeometry())
 
-    def closeEvent(self, event):
+            # Save window state (maximized, etc.)
+            self.qt_settings.setValue("window_state", self.saveState())
+
+            if self.logger:
+                self.logger.info("main", "Window state saved to settings")
+
+        except Exception as e:
+            if self.logger:
+                self.logger.warning("main", f"Could not save window state: {e}")
+
+    # Note: toggle_maximize method removed - using native window controls
+
+    def closeEvent(self, event: QCloseEvent) -> None:
         """Handle application close event.
 
         This method is called when the application is closed. It ensures that
@@ -843,17 +1092,31 @@ class MainWindow(QMainWindow):
 
         # Terminate any running CHDMAN processes
         try:
-            if hasattr(self, "compression_page") and self.compression_page.chd_manager:
-                self.logger.info(
-                    "main", "Terminating CHDMAN processes from compression_page."
-                )
-                self.compression_page.chd_manager.terminate_all_processes()
-            if hasattr(self, "extraction_page") and self.extraction_page.chd_manager:
-                self.logger.info(
-                    "main", "Terminating CHDMAN processes from extraction_page."
-                )
-                self.extraction_page.chd_manager.terminate_all_processes()
-            # Add other pages if they also use chd_manager directly
+            # Handle compression tab (inside QTabWidget)
+            if hasattr(self, "single_file_tab") and hasattr(
+                self.single_file_tab, "chd_manager"
+            ):
+                if self.single_file_tab.chd_manager:
+                    self.logger.info(
+                        "main", "Terminating CHDMAN processes from single_file_tab."
+                    )
+                    self.single_file_tab.chd_manager.terminate_all_processes()
+
+            if hasattr(self, "batch_tab") and hasattr(self.batch_tab, "chd_manager"):
+                if self.batch_tab.chd_manager:  # type: ignore[union-attr]
+                    self.logger.info(
+                        "main", "Terminating CHDMAN processes from batch_tab."
+                    )
+                    self.batch_tab.chd_manager.terminate_all_processes()  # type: ignore[union-attr]
+
+            if hasattr(self, "extraction_page") and hasattr(
+                self.extraction_page, "chd_manager"
+            ):
+                if self.extraction_page.chd_manager:
+                    self.logger.info(
+                        "main", "Terminating CHDMAN processes from extraction_page."
+                    )
+                    self.extraction_page.chd_manager.terminate_all_processes()
         except Exception as e:
             self.logger.error("main", f"Error terminating CHDMAN processes: {str(e)}")
 
@@ -873,16 +1136,17 @@ class MainWindow(QMainWindow):
                 )
 
         # Add cleanup for other tabs like batch_tab if they have similar methods
-        if hasattr(self, "batch_page") and hasattr(
-            self.batch_page, "cleanup_temp_directories"
+        if hasattr(self, "batch_tab") and hasattr(
+            self.batch_tab, "cleanup_temp_directories"
         ):
             try:
-                self.logger.info(
-                    "main", "Cleaning up batch_page temporary directories."
-                )
-                self.batch_page.cleanup_temp_directories()
+                self.logger.info("main", "Cleaning up batch_tab temporary directories.")
+                self.batch_tab.cleanup_temp_directories()  # type: ignore[union-attr]
             except Exception as e:
-                self.logger.error("main", f"Error during batch_page cleanup: {str(e)}")
+                self.logger.error("main", f"Error during batch_tab cleanup: {str(e)}")
+
+        # Save window state before closing
+        self.save_window_state()
 
         # Save settings
         if hasattr(SETTINGS, "save"):
@@ -923,6 +1187,12 @@ sys.excepthook = log_uncaught_exception
 
 def main():
     """Main entry point for the application."""
+    # Ensure stdout/stderr can handle emoji and Unicode on Windows cp1252 consoles
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     app = QApplication(sys.argv)
     app.setApplicationName("RetroClamp")
     app.setApplicationVersion(
@@ -931,7 +1201,122 @@ def main():
     app.setOrganizationName("RetroClamp")
     app.setOrganizationDomain("retroclamp.org")
 
-    _ = MainWindow()  # Create window and keep a reference
+    # Force QtAwesome to initialize immediately after QApplication creation
+    if qta:
+        print("[DEBUG] Force-initializing QtAwesome fonts...")
+        try:
+            # Force QtAwesome instance creation and font loading
+            qta._instance()
+            # Test with a simple icon to ensure fonts are loaded
+            qta.icon("fa5s.home")
+            print("[DEBUG] QtAwesome force-initialized")
+
+            # Check if fonts actually loaded
+            if hasattr(qta, "_instance") and qta._instance():
+                instance = qta._instance()
+                if hasattr(instance, "charmap") and instance.charmap:
+                    charmap_size = len(instance.charmap)
+                    print(f"✅ DEBUG: QtAwesome loaded {charmap_size} icons")
+
+                    # Check available prefixes
+                    prefixes = set()
+                    for key in list(instance.charmap.keys()):
+                        if "." in key:
+                            prefix = key.split(".")[0]
+                            prefixes.add(prefix)
+                    print(f"✅ DEBUG: Available prefixes: {sorted(prefixes)}")
+
+                    # Find icons we actually need that exist
+                    needed_icons = [
+                        "fa5s.home",
+                        "fa5s.house",
+                        "fa5s.file-archive",
+                        "fa5s.compress",
+                        "fa5s.folder-open",
+                        "fa5s.file-export",
+                        "fa5s.download",
+                        "fa5s.upload",
+                        "fa5s.wrench",
+                        "fa5s.tools",
+                        "fa5s.cog",
+                        "fa5s.palette",
+                        "fa5s.paint-brush",
+                        "fa5s.brush",
+                        "fa5s.chevron-left",
+                        "fa5s.chevron-right",
+                        "fa5s.arrow-left",
+                        "fa5s.arrow-right",
+                    ]
+
+                    print("🔍 DEBUG: Checking for icons we need:")
+                    available_icons = {}
+                    for icon in needed_icons:
+                        exists = icon in instance.charmap
+                        print(f"  {'✅' if exists else '❌'} {icon}: {exists}")
+                        if exists:
+                            available_icons[icon] = True
+
+                    # Store available icons for use in create_nav_button
+                    global AVAILABLE_QTA_ICONS
+                    AVAILABLE_QTA_ICONS = available_icons
+
+                else:
+                    print("❌ DEBUG: QtAwesome charmap still empty after force init")
+        except Exception as e:
+            print(f"❌ DEBUG: QtAwesome force initialization failed: {e}")
+    else:
+        print("❌ DEBUG: QtAwesome not available")
+
+    # Apply WCAG-compliant stylesheet for accessibility
+    try:
+        # Load WCAG-compliant stylesheet first
+        with open("wcag_compliant_styles.qss", encoding="utf-8") as f:
+            wcag_stylesheet = f.read()
+
+        app.setStyleSheet(wcag_stylesheet)
+        print("✅ Applied WCAG AA/AAA compliant stylesheet")
+
+    except FileNotFoundError:
+        # Fallback to unified stylesheet
+        try:
+            with open("unified_styles.qss", encoding="utf-8") as f:
+                unified_stylesheet = f.read()
+
+            app.setStyleSheet(unified_stylesheet)
+            print("✅ Applied unified RetroClamp stylesheet (fallback)")
+
+        except FileNotFoundError:
+            # Fallback to theme manager approach
+            try:
+                from core.theme_manager import ThemeManager
+
+                theme_manager = ThemeManager()
+
+                # Load saved theme or default to dark
+                saved_theme = theme_manager.load_saved_theme()
+                print(f"✅ Applied '{saved_theme}' theme via ThemeManager")
+
+            except ImportError:
+                # Final fallback to QDarkStyleSheet
+                if qdarkstyle:
+                    try:
+                        base_stylesheet = qdarkstyle.load_stylesheet_pyside6()
+                        app.setStyleSheet(base_stylesheet)
+                        print("✅ Applied QDarkStyleSheet fallback")
+                    except Exception as e:
+                        print(
+                            f"Warning: Error loading QDarkStyleSheet: {e}. Using default styling."
+                        )
+                else:
+                    print("Warning: Using default Qt styling.")
+
+    except Exception as e:
+        print(f"Warning: Error loading stylesheet: {e}. Using default styling.")
+
+    # Create window after stylesheet is applied
+    window = AppWindow()
+    window.show()
+
     sys.exit(app.exec())
 
 

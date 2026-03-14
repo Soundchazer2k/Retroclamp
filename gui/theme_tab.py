@@ -25,10 +25,34 @@ from PySide6.QtWidgets import (
 
 from modules.app_settings import AppSettings
 
-# Import local modules
-from modules.theme_config import ThemeConfig
-from modules.theme_utils import calculate_contrast_ratio, is_accessible
-from modules.ui_functions import apply_theme, load_svg_icon
+# Import new theme manager
+try:
+    from core.theme_manager import ThemeManager, ThemeType
+except ImportError:
+    # Fallback for old theme system
+    ThemeManager = None  # type: ignore[assignment,misc]
+    ThemeType = None  # type: ignore[assignment,misc]
+
+# Import local modules with fallbacks
+try:
+    from modules.theme_config import ThemeConfig
+    from modules.theme_utils import calculate_contrast_ratio, is_accessible
+    from modules.ui_functions import apply_theme, load_svg_icon
+except ImportError:
+    # Fallback implementations
+    ThemeConfig = None  # type: ignore[assignment,misc]
+
+    def calculate_contrast_ratio(color1, color2):  # type: ignore[misc]
+        return 7.0
+
+    def is_accessible(ratio):  # type: ignore[misc]
+        return ratio >= 4.5
+
+    def apply_theme(window, theme):  # type: ignore[misc]
+        pass
+
+    def load_svg_icon(name, size, color):  # type: ignore[misc]
+        return None
 
 
 class ColorButton(QPushButton):
@@ -99,12 +123,23 @@ class ThemeTab(QWidget):
         # Initialize settings
         self.settings = AppSettings()
 
-        # Initialize theme config
-        self.theme_config = ThemeConfig()
+        # Initialize theme manager (new system)
+        if ThemeManager is not None:
+            self.theme_manager = ThemeManager()
+            # Create light overlay if it doesn't exist
+            self.theme_manager.create_light_overlay()
+        else:
+            self.theme_manager = None
 
-        # Load current theme
-        theme_name = self.settings.get("general", "theme", "dracula")
-        self.current_theme = self.theme_config.load_theme(theme_name)
+        # Initialize theme config (legacy fallback)
+        if ThemeConfig is not None:
+            self.theme_config = ThemeConfig()
+            # Load current theme
+            theme_name = self.settings.get("general", "theme", "dracula")
+            self.current_theme = self.theme_config.load_theme(theme_name)
+        else:
+            self.theme_config = None
+            self.current_theme = {}
 
         # Setup UI
         self.setup_ui()
@@ -126,10 +161,18 @@ class ThemeTab(QWidget):
         layout.addWidget(title_label)
 
         # Description
-        desc_label = QLabel(
-            "Customize the application theme by selecting a predefined theme or "
-            "creating your own. Changes will be applied immediately."
-        )
+        if self.theme_manager:
+            desc_text = (
+                "Select from Dark, Light, or System themes. "
+                "The System theme automatically matches your operating system's appearance."
+            )
+        else:
+            desc_text = (
+                "Customize the application theme by selecting a predefined theme or "
+                "creating your own. Changes will be applied immediately."
+            )
+
+        desc_label = QLabel(desc_text)
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 

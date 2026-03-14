@@ -305,7 +305,7 @@ class RetroclamptAnalyzer:
                     patterns["gui_threading"].append(rel_path)
 
                 # Check plugin patterns
-                if "PLUGIN_NAME" in content or "register_tab" in content:
+                if "PLUGIN_NAME" in content or "register_panel" in content:
                     patterns["plugin_implementations"].append(rel_path)
 
                 # Security issues

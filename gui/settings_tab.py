@@ -69,7 +69,7 @@ class SettingsTab(QWidget):
 
         # Title
         title_label = QLabel("Application Settings")
-        title_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title_label.setObjectName("pageTitle")  # Use unified CSS styling
         layout.addWidget(title_label)
 
         # Description
@@ -78,33 +78,11 @@ class SettingsTab(QWidget):
             "Changes will be applied after clicking the Save button."
         )
         desc_label.setWordWrap(True)
+        desc_label.setObjectName("pageDescription")  # Use unified CSS styling
         layout.addWidget(desc_label)
 
-        # Create tabs
+        # Create tabs (styling handled by unified stylesheet)
         self.tabs = QTabWidget()
-        # Add the CSS styling here
-        self.tabs.setStyleSheet(
-            """
-            QTabBar::tab {
-                padding: 8px 16px;
-                margin-right: 2px;
-                border: 1px solid #444;
-                border-bottom: none;
-                border-radius: 4px 4px 0 0;
-                background: #333;
-                color: #ccc;
-            }
-            QTabBar::tab:selected {
-                background: #6272a4;           /* active tab highlight */
-                color: #f8f8f2;
-                font-weight: bold;
-            }
-            QTabWidget::pane {
-                border: 1px solid #444;
-                top: -1px;                     /* overlap with tabs */
-            }
-        """
-        )
 
         # General settings tab
         self.general_tab = QWidget()

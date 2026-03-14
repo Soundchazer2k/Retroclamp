@@ -1,0 +1,160 @@
+/* ===================================================================
+   RetroClamp Conservative Custom QSS Overlay
+   Minimal fixes that preserve Qt's natural behavior
+   =================================================================== */
+
+/* 1. Restore checkbox & radio indicators with checkmark */
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #44475a;
+    border-radius: 3px;
+    background: #282a36;
+}
+
+QCheckBox::indicator:checked {
+    background: #8be9fd;
+    border: 1px solid #8be9fd;
+    image: url(resources/checkmark.svg);
+}
+
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid palette(mid);
+    border-radius: 8px;
+    background: palette(base);
+}
+
+QRadioButton::indicator:checked {
+    background: palette(highlight);
+    border: 1px solid palette(highlight);
+}
+
+/* 2. MINIMAL button styling - just hover/pressed states */
+QPushButton:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid #6272a4;
+}
+
+QPushButton:pressed {
+    background: #8be9fd;
+    color: #fff;
+    border: 1px solid #8be9fd;
+}
+
+/* RetroClamp sidebar navigation buttons - left border style */
+QPushButton[objectName^="btn_"][selected="true"] {
+    background: transparent;
+    border-left: 4px solid #bd93f9;
+    color: #bd93f9;
+    padding-left: 12px; /* Adjust for border */
+}
+
+QPushButton[objectName^="btn_"]:hover {
+    background: rgba(189, 147, 249, 0.1);
+    border-left: 2px solid #bd93f9;
+    padding-left: 14px; /* Adjust for border */
+}
+
+/* 3. MINIMAL progress bars & scrollbars */
+QProgressBar::chunk {
+    background: #8be9fd;
+    border-radius: 2px;
+}
+
+/* Scrollbar handle styling */
+QScrollBar::handle:horizontal,
+QScrollBar::handle:vertical {
+    background: #44475a;
+    border-radius: 4px;
+    min-height: 20px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:vertical:hover {
+    background: #bd93f9;
+}
+
+/* 4. MINIMAL tab styling - just colors */
+QTabBar::tab:selected {
+    background: #bd93f9;
+    color: #f8f8f2;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover {
+    background: rgba(189, 147, 249, 0.15);
+    color: #f8f8f2;
+}
+
+/* Override any specific tab widget styling */
+QTabWidget QTabBar::tab:selected {
+    background: #bd93f9 !important;
+    color: #f8f8f2 !important;
+}
+
+QTabWidget QTabBar::tab:hover {
+    background: rgba(189, 147, 249, 0.15) !important;
+}
+
+/* 5. MINIMAL form styling - just colors */
+QLineEdit:focus {
+    border: 1px solid #bd93f9;
+}
+
+/* 6. ONLY fix ComboBox dropdown arrows - the main issue */
+QComboBox::down-arrow {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #f8f8f2;
+}
+
+/* 7. ONLY fix SpinBox arrows - minimal approach */
+QSpinBox::up-arrow {
+    width: 0;
+    height: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #f8f8f2;
+}
+
+QSpinBox::down-arrow {
+    width: 0;
+    height: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #f8f8f2;
+}
+
+/* 8. Specific navigation improvements for left menu */
+QFrame#leftMenuBg QPushButton {
+    text-align: left;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 0px;
+    background: transparent;
+}
+
+QFrame#leftMenuBg QPushButton:hover {
+    background: rgba(189, 147, 249, 0.1);
+    border-left: 2px solid #bd93f9;
+}
+
+QFrame#leftMenuBg QPushButton[selected="true"] {
+    background: transparent;
+    border-left: 4px solid #bd93f9;
+    color: #bd93f9;
+}
+
+/* 9. MINIMAL groupbox styling */
+QGroupBox::title {
+    color: #bd93f9;
+}
+
+/* 10. Remove any problematic sizing overrides */
+/* DO NOT set min-width, min-height, padding-right on core widgets */
+/* Let Qt handle the natural sizing */

@@ -169,7 +169,8 @@ RetroClamp supports a plugin system for adding new tools. To create a plugin:
    PLUGIN_VERSION = "1.0.0"
    PLUGIN_AUTHOR = "Your Name"
    ```
-3. Implement a `register_tab` function that takes a parent widget and adds your tool's UI to it
+3. Implement a `register_panel` function that accepts a `ToolsView` and returns an
+   `Optional[QWidget]` — the panel to embed — or `None` to show a coming-soon card
 
 See `tools/scummvm_generator.py` for an example.
 

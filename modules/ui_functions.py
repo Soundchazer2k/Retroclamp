@@ -76,8 +76,8 @@ def load_svg_icon(name: str, size: int = 24, color_hex: str = "#ffffff") -> QIco
             renderer = QSvgRenderer(icon_path)
 
             # Set up rendering hints
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            painter.setRenderHint(QPainter.Antialiasing)  # type: ignore[attr-defined]
+            painter.setRenderHint(QPainter.SmoothPixmapTransform)  # type: ignore[attr-defined]
 
             # Render the SVG onto the pixmap
             renderer.render(painter)
@@ -99,7 +99,7 @@ def load_svg_icon(name: str, size: int = 24, color_hex: str = "#ffffff") -> QIco
         pix.fill(Qt.GlobalColor.transparent)
 
         painter = QPainter(pix)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.Antialiasing)  # type: ignore[attr-defined]
 
         # Draw a colored square with the first letter of the name
         color = QColor(color_hex)
@@ -191,44 +191,9 @@ def update_icons(window: QWidget, theme_config: Dict[str, Any]) -> None:
         window: Widget containing buttons with icons
         theme_config: Theme configuration dictionary
     """
-    # If theme_config is None, use default colors
-    if theme_config is None:
-        theme_config = {}
-
-    colors = theme_config.get("colors", {})
-    # Handle both 'foreground' and 'text' for compatibility
-    foreground = colors.get("text", colors.get("foreground", "#f8f8f2"))
-    primary = colors.get("primary", "#bd93f9")
-
-    # Define icon mappings (button name -> icon name)
-    icon_mappings = {
-        "toggleButton": "menu-2",
-        "btn_home": "home",
-        "btn_widgets": "layout-grid",
-        "btn_new": "file-plus",
-        "btn_save": "device-floppy",
-        "btn_exit": "logout",
-        "btn_settings": "settings",
-        "btn_compress": "file-zip",
-        "btn_extract": "file-export",
-        "btn_info": "info-circle",
-        "btn_verify": "check",
-        "btn_theme": "palette",
-        "btn_tools": "tool",
-        "minimizeAppBtn": "minus",
-        "maximizeRestoreAppBtn": "square",
-        "closeAppBtn": "x",
-    }
-
-    # Update icons for all buttons with mappings
-    for button_name, icon_name in icon_mappings.items():
-        button = window.findChild(QPushButton, button_name)
-        if button:
-            # Use primary color for selected buttons, foreground for others
-            if button.property("selected") == "true":
-                button.setIcon(load_svg_icon(icon_name, 24, primary))
-            else:
-                button.setIcon(load_svg_icon(icon_name, 24, foreground))
+    # Skip icon updates - let main.py handle QtAwesome icons
+    # This prevents overriding the FontAwesome 6 icons with Tabler icons
+    return
 
 
 def select_menu(
@@ -297,10 +262,10 @@ def toggle_menu(window: QMainWindow, enable: bool) -> None:
     target_width = max_width if width == min_width else min_width
 
     # Animate the width change
-    window.animation = window.ui.leftMenuBg.animate(
+    window.animation = window.ui.leftMenuBg.animate(  # type: ignore[attr-defined]
         "minimumWidth", "maximumWidth", target_width, 300
     )
-    window.animation.start()
+    window.animation.start()  # type: ignore[attr-defined]
 
 
 def set_window_shadow(
@@ -358,12 +323,12 @@ def create_rounded_widget(widget: QWidget, radius: int = 10) -> None:
     widget.setStyleSheet(
         f"""
         border-radius: {radius}px;
-        background-color: {widget.palette().color(QPalette.Window).name()};
+        background-color: {widget.palette().color(QPalette.ColorRole.Window).name()};
     """
     )
 
     # Make sure the widget clips its children to the rounded shape
-    widget.setAttribute(Qt.WA_TranslucentBackground)
+    widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     widget.setMask(
         QRect(0, 0, widget.width(), widget.height()).adjusted(
             radius, radius, -radius, -radius

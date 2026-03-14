@@ -404,8 +404,6 @@ This section contains various diagrams that visually represent the RetroClamp ap
 
 ### 1. System Overview Diagram
 
-
-
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              RetroClamp Application                              │
@@ -455,8 +453,6 @@ This section contains various diagrams that visually represent the RetroClamp ap
 ```
 
 ### 2. Threading Model Diagram
-
-
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -517,8 +513,6 @@ This section contains various diagrams that visually represent the RetroClamp ap
 
 ### 3. Signal Flow Diagram (Mermaid)
 
-
-
 ```mermaid
 graph TD
     A[User Action in GUI] --> B[Core Manager Method Call]
@@ -561,8 +555,6 @@ graph TD
 ```
 
 ### 4. Data Flow: CHD Compression Pipeline (Mermaid)
-
-
 
 ```mermaid
 sequenceDiagram
@@ -612,7 +604,7 @@ sequenceDiagram
 
 ### 5. Worker Lifecycle Diagram
 
-
+(Placeholder for Worker Lifecycle ASCII Diagram - Please insert the diagram code here)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -668,7 +660,7 @@ sequenceDiagram
 
 ### 6. Error Handling Flow (Mermaid)
 
-
+(Placeholder for Error Handling Flow Mermaid Diagram - Please insert the diagram code here)
 
 ```mermaid
 flowchart TD
@@ -707,7 +699,7 @@ flowchart TD
 
 ### 7. Batch Processing State Machine
 
-
+(Placeholder for Batch Processing State Machine ASCII Diagram - Please insert the diagram code here)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -765,7 +757,7 @@ flowchart TD
 
 ### 8. Module Dependency Visualization
 
-
+(Placeholder for Module Dependency ASCII Diagram - Please insert the diagram code here)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐

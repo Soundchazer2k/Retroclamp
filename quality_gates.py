@@ -448,8 +448,8 @@ def main():
 
             if 'PLUGIN_NAME' not in content:
                 issues.append(f"{plugin.name}: Missing PLUGIN_NAME")
-            if 'def register_tab' not in content:
-                issues.append(f"{plugin.name}: Missing register_tab function")
+            if 'def register_panel' not in content:
+                issues.append(f"{plugin.name}: Missing register_panel function")
 
         except Exception:
             continue
@@ -529,7 +529,7 @@ This project uses automated quality gates:
 
 ### Plugin System (tools/)
 - Include required metadata: PLUGIN_NAME, PLUGIN_DESCRIPTION, etc.
-- Implement `register_tab(parent)` function
+- Implement `register_panel(tools_view) -> Optional[QWidget]` function
 - Handle errors gracefully
 
 ### GUI Components (gui/)

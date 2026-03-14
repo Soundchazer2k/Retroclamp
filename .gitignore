@@ -126,3 +126,9 @@ ruff_output.txt
 
 # Ignore the RetroClamp test suite for now
 tests/core/retroclamp_test_suite.py
+
+# Screenshots directory (contains UI screenshots for development/testing)
+screenshots/
+*.png
+*.jpg
+*.jpeg

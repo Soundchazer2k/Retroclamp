@@ -26,7 +26,7 @@ debug_logger = DebugLogger(module_name="core.archive")
 try:
     import py7zr
 except ImportError:
-    py7zr = None
+    py7zr = None  # type: ignore[assignment]
     debug_logger.warning(
         "core.archive",
         "py7zr not found, 7z extraction will fall back to other methods.",

@@ -25,8 +25,8 @@ def main():
 
             if "PLUGIN_NAME" not in content:
                 issues.append(f"{plugin.name}: Missing PLUGIN_NAME")
-            if "def register_tab" not in content:
-                issues.append(f"{plugin.name}: Missing register_tab function")
+            if "def register_panel" not in content:
+                issues.append(f"{plugin.name}: Missing register_panel function")
 
         except Exception as e:
             logging.warning(f"Exception in validate_plugins: {e}")

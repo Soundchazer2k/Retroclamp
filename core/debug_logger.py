@@ -322,6 +322,43 @@ class DebugLogger:
         if exit_code != 0 and output:
             self.warning(None, f"CHDMAN Output: {output.strip()}")
 
+    def clear_log(self) -> bool:
+        """Clear the contents of the current log file.
+
+        Flushes and temporarily removes the file handler, truncates the log
+        file to zero bytes, then re-attaches the handler so logging resumes
+        normally.
+
+        Returns:
+            True if the log file was cleared successfully, False otherwise.
+        """
+        try:
+            # Remove existing handler so the file can be truncated safely
+            if self._handler is not None:
+                self._handler.flush()
+                self.logger.removeHandler(self._handler)
+                self._handler.close()
+                self._handler = None
+
+            # Truncate the log file
+            log_file_path = self.get_log_file_path()
+            with open(log_file_path, "w", encoding="utf-8"):
+                pass  # Opening in "w" mode truncates the file
+
+            # Re-attach the handler so logging continues normally
+            self.configure_handler()
+            self.info("DebugLogger.clear_log", "Log file cleared.")
+            return True
+        except Exception as e:
+            print(f"[DebugLogger] ERROR: Failed to clear log file: {e}")
+            # Attempt to re-attach handler even if truncation failed
+            if self._handler is None:
+                try:
+                    self.configure_handler()
+                except Exception:
+                    pass
+            return False
+
 
 _logger_instance: Optional[DebugLogger] = None
 

@@ -37,12 +37,24 @@ class AppSettings:
     DEFAULT_SETTINGS: Dict[str, Dict[str, Any]] = {
         # General settings
         "general": {
-            "theme": "dracula",
             "language": "en",
             "check_updates": True,
             "confirm_exit": True,
             "save_window_state": True,
             "show_tooltips": True,
+            "reopen_last_session": False,
+            "worker_thread_count": 2,
+        },
+        # Appearance settings (replaces general.theme)
+        "appearance": {
+            "theme": "dracula",
+            "accent_color": "#bd93f9",
+            "font_size": "medium",
+        },
+        # CHDMAN settings
+        "chdman": {
+            "compression_level": "",
+            "verify_checksum": True,
         },
         # Compression settings
         "compression": {
@@ -149,11 +161,39 @@ class AppSettings:
                         self.settings[category][key] = value
                 self.qsettings.endGroup()
 
+            # Migrate general.theme → appearance.theme (one-time upgrade migration)
+            self._migrate_general_theme()
+
             self.signals.loaded.emit()
         except Exception as e:
             self.signals.error.emit(f"Error loading settings: {str(e)}")
             # Fallback to default settings
             self.settings = self._deep_copy_dict(self.DEFAULT_SETTINGS)
+
+    def _migrate_general_theme(self) -> None:
+        """One-time migration: copy general.theme → appearance.theme, then remove it.
+
+        Older versions stored the theme under ``general.theme``.  The new
+        architecture uses ``appearance.theme``.  This method runs once on
+        first launch after upgrade; it is a no-op if ``general.theme`` is
+        already absent.
+        """
+        self.qsettings.beginGroup("general")
+        old_theme = self.qsettings.value("theme")
+        if old_theme is not None:
+            self.qsettings.remove("theme")
+        self.qsettings.endGroup()
+
+        if old_theme and isinstance(old_theme, str):
+            # Only overwrite appearance.theme if it's still at its default
+            if self.settings.get("appearance", {}).get("theme") == "dracula":
+                if "appearance" not in self.settings:
+                    self.settings["appearance"] = {}
+                self.settings["appearance"]["theme"] = old_theme
+                # Persist migrated value
+                self.qsettings.beginGroup("appearance")
+                self.qsettings.setValue("theme", old_theme)
+                self.qsettings.endGroup()
 
     def save_settings(self) -> None:
         """Save settings to QSettings."""

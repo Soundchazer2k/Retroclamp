@@ -7,7 +7,7 @@ using the CHDMAN utility.
 import functools  # Added for functools.partial
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
 
 from PySide6.QtCore import QTimer, Signal, Slot  # Added Slot
 from PySide6.QtGui import QGuiApplication, QIcon
@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,  # ADDED IMPORT
@@ -34,17 +33,25 @@ from PySide6.QtWidgets import (
 
 from core.archive import ArchiveManager
 from core.chdman import CHDTask, CHDTaskType, get_chd_manager
-from core.debug_logger import get_logger
+from core.debug_logger import DebugLogger, get_logger
 from core.file_scanner import FileScanner
 from core.temp_manager import TempDirectoryManager
+from gui.layout_utils import StandardFormLayout
 
 # Constants
 FILE_TABLE_COLUMNS = 3
 UI_UPDATE_INTERVAL_MS = 1000
 DEFAULT_LOG_FILENAME = "retroclamp.log"
 
+
 # Compression profiles
-COMPRESSION_PROFILES = {
+class ProfileSettings(TypedDict):
+    algorithms: str
+    hunk_size: int
+    media: str
+
+
+COMPRESSION_PROFILES: Dict[str, ProfileSettings] = {
     "CD - Default": {
         "algorithms": "cdlz,cdzl,cdfl",
         "hunk_size": 19584,
@@ -88,6 +95,8 @@ class CompressionTab(QWidget):
     compression_started = Signal()
     compression_finished = Signal(bool)  # success
     file_processed = Signal(str, bool, str)  # file_path, success, message
+
+    logger: Optional[DebugLogger]
 
     def __init__(self, parent: Optional[QWidget] = None, app_settings: Any = None):
         """Initialize the CompressionTab widget.
@@ -642,31 +651,61 @@ class CompressionTab(QWidget):
             row = self.add_file_to_table(
                 str(input_path)
             )  # add_file_to_table now expects str
-            self.update_file_status(row, "Queued")
+            assert row is not None
+            self.update_file_status(row, "pending")
             if self.logger:
                 self.logger.debug("CompressionTab", f"Added file to table at row {row}")
 
             output_file = output_dir / f"{input_path.stem}.chd"
             profile_name = self.compression_profile_combo.currentText()
-            profile = COMPRESSION_PROFILES.get(profile_name, {})
-            algorithms = profile.get("algorithms")
-            hunk_size_obj = profile.get("hunk_size")
-            hunk_size = int(hunk_size_obj) if hunk_size_obj is not None else None
-            profile_media = profile.get(
-                "media", self.media_type_combo.currentText()
-            )  # Prioritize profile's media
+            profile: Optional[ProfileSettings] = COMPRESSION_PROFILES.get(profile_name)
+
+            if not profile:
+                self.log_message(
+                    f"Profile '{profile_name}' not found. Using default settings.",
+                    "warning",
+                )
+
+            hunk_size_from_profile: Any = profile.get("hunk_size") if profile else None
+            hunk_size: Optional[int] = None  # This is the variable we'll use for CHDMan
+
+            if isinstance(hunk_size_from_profile, int):
+                hunk_size = hunk_size_from_profile
+            elif isinstance(hunk_size_from_profile, str):
+                try:
+                    hunk_size_int = int(hunk_size_from_profile)
+                    hunk_size = hunk_size_int
+                except ValueError:
+                    self.log_message(
+                        f"Warning: hunk_size '{hunk_size_from_profile}' in profile '{profile_name}' is not a valid integer. Using default.",
+                        "warning",
+                    )
+            elif hunk_size_from_profile is not None:
+                # If it's not an int or str but also not None, log a warning.
+                self.log_message(
+                    f"Warning: hunk_size in profile '{profile_name}' has unexpected type: {type(hunk_size_from_profile)}. Value: {hunk_size_from_profile}. Using default.",
+                    "warning",
+                )
+
+            if profile:
+                profile_media = profile.get(
+                    "media", self.media_type_combo.currentText()
+                )  # Prioritize profile's media
+            else:
+                profile_media = self.media_type_combo.currentText()
 
             if self.logger:
+                algs = profile.get("algorithms") if profile else None  # type: ignore[union-attr]
                 self.logger.debug(
                     "CompressionTab",
-                    f"Profile: {profile_name}, algorithms: {algorithms}, hunk_size: {hunk_size}, media: {profile_media}",
+                    f"Profile: {profile_name}, algorithms: {algs}, hunk_size: {hunk_size}, media: {profile_media}",
                 )
 
             task = CHDTask(
                 task_type=CHDTaskType.COMPRESS,
                 input_file=str(input_path),
                 output_file=str(output_file),
-                algorithms=str(algorithms) if algorithms is not None else None,
+                algorithms=str(profile.get("algorithms")) if profile else None,
                 hunk_size=hunk_size,
                 force=self.overwrite_check.isChecked(),
                 media_type=str(profile_media) if profile_media is not None else None,
@@ -829,11 +868,15 @@ class CompressionTab(QWidget):
                     self.update_file_status(task_row, "Signal Error")
 
         except Exception as e:
-            error_msg = f"Critical error during _execute_tasks: {e}"
-            self.log_message(error_msg, level="error")
+            self.log_message(f"Critical error during task execution: {e}", "error")
             if self.logger:
-                self.logger.exception("CompressionTab", error_msg)
-            self._abort_processing()  # Abort on critical error
+                self.logger.error(  # type: ignore[call-arg]
+                    "CompressionTab",
+                    f"Critical error during task execution: {e}",
+                    exc_info=True,
+                )
+            self._abort_processing()  # Abort on critical failure
+            return
 
     # New dedicated handlers for worker signals
     @Slot(str, int, str)  # original_file_path, row, chdman_command_str
@@ -867,7 +910,8 @@ class CompressionTab(QWidget):
                 # self.update_file_status(row, message) # This can be too chatty, progress bar shows percentage
                 if progress_percent > 0 and progress_percent < 100:
                     self.update_file_status(
-                        row, f"Compressing ({progress_percent:.0f}%)"
+                        row,
+                        "Processing",  # Changed from dynamic f-string to fixed "Processing"
                     )
             else:
                 if self.logger:
@@ -1120,7 +1164,9 @@ class CompressionTab(QWidget):
                 ):  # If it was 100 but not "Complete"
                     self.overall_progress.setValue(0)  # Reset if ready
 
-    def add_file_to_table(self, file_path_str: str) -> int:  # Changed param to str
+    def add_file_to_table(
+        self, file_path_str: str
+    ) -> Optional[int]:  # Ensure return type is Optional[int]
         """Adds a file to the table and returns the row index."""
         try:
             # Normalize path for display and internal tracking if needed, but use string for display
@@ -1148,18 +1194,19 @@ class CompressionTab(QWidget):
             progress_bar.setFormat("%p%")
             self.files_table.setCellWidget(row_position, 2, progress_bar)
 
-            return row_position
+            return int(row_position)
         except Exception as e:
             self.log_message(
                 f"Error adding file {file_path_str} to table: {e}", "error"
             )
             if self.logger:
-                self.logger.exception(
-                    "CompressionTab", f"Failed to add file to table: {file_path_str}"
+                self.logger.error(
+                    "CompressionTab",
+                    f"Error adding file {file_path_str} to table: {e}",
                 )
-            return -1  # Indicate failure
+            return None  # Ensure None is returned on error
 
-    def update_file_status(self, row: int, status: str) -> None:
+    def update_file_status(self, row: int, status: str):
         """Updates the status of a file in the table."""
         if not (0 <= row < self.files_table.rowCount()):
             self.log_message(
@@ -1222,12 +1269,16 @@ class CompressionTab(QWidget):
                 )
 
     def _build_ui(self) -> None:
-        """Build the user interface."""
-        layout = QVBoxLayout(self)
-        layout.setSpacing(18)
-        layout.setContentsMargins(18, 18, 18, 18)
+        """Build the user interface using unified layout approach."""
+        # Create main layout with standardized spacing
+        layout = StandardFormLayout.create_main_layout(
+            self,
+            title="Disk Image Compression",
+            description="Compress disk images to CHD format using CHDMAN. "
+            "Supports various disk image formats and archives.",
+        )
 
-        # Build UI sections
+        # Build UI sections using unified approach
         layout.addWidget(self._create_input_section())
         layout.addWidget(self._create_output_section())
         layout.addWidget(self._create_options_section())
@@ -1236,65 +1287,81 @@ class CompressionTab(QWidget):
         )  # Give table stretch factor
         layout.addWidget(self._create_log_section())
         layout.addWidget(self._create_progress_section())
-        layout.addLayout(self._create_action_buttons())
+
+        # Create unified button bar
+        action_buttons = self._create_action_buttons_list()
+        StandardFormLayout.create_button_bar(action_buttons, layout)
 
     def _create_input_section(self) -> QGroupBox:
-        """Create the input section of the UI."""
-        input_group = QGroupBox("Input")
-        input_layout = QFormLayout()
+        """Create the input section using unified layout approach."""
+        input_group, input_layout = StandardFormLayout.create_form_group("Input")
 
+        # Create input path field with browse button
         self.input_path_edit = QLineEdit()
         self.input_path_edit.setPlaceholderText(
             "Select a disk image file or archive (.cue, .iso, .bin, .img, .chd, .gdi, .mdf, .nrg, etc.)"
         )
 
-        self.browse_input_btn = QPushButton("Browse...")  # Shorter text
-        self.browse_input_btn.setIcon(
-            QIcon.fromTheme("document-open")
-        )  # Use theme icon
+        self.browse_input_btn = QPushButton("Browse...")
+        self.browse_input_btn.setIcon(QIcon.fromTheme("document-open"))
         self.browse_input_btn.setToolTip("Select the file or archive to compress.")
 
+        # Create horizontal layout for path + browse button
         input_row_layout = QHBoxLayout()
-        input_row_layout.addWidget(self.input_path_edit, 1)
+        input_row_layout.addWidget(self.input_path_edit)
         input_row_layout.addWidget(self.browse_input_btn)
+        input_row_layout.setSpacing(8)
 
-        input_layout.addRow("Input File/Archive:", input_row_layout)
-        input_group.setLayout(input_layout)
+        # Create container widget for the layout
+        input_widget = QWidget()
+        input_widget.setLayout(input_row_layout)
+
+        StandardFormLayout.add_form_field(
+            input_layout, "Input File/Archive:", input_widget
+        )
         return input_group
 
     def _create_output_section(self) -> QGroupBox:
-        """Create the output section of the UI."""
-        output_group = QGroupBox("Output")
-        output_layout = QFormLayout()
+        """Create the output section using unified layout approach."""
+        output_group, output_layout = StandardFormLayout.create_form_group("Output")
 
+        # Create output directory field with browse button
         self.output_dir_edit = QLineEdit()
         self.output_dir_edit.setPlaceholderText(
             "Select output directory (if not same as input)"
         )
 
-        self.browse_output_btn = QPushButton("Browse...")  # Shorter text
-        self.browse_output_btn.setIcon(QIcon.fromTheme("folder-open"))  # Use theme icon
+        self.browse_output_btn = QPushButton("Browse...")
+        self.browse_output_btn.setIcon(QIcon.fromTheme("folder-open"))
         self.browse_output_btn.setToolTip(
             "Select the directory to save compressed CHD files."
         )
 
+        # Create horizontal layout for path + browse button
         output_row_layout = QHBoxLayout()
-        output_row_layout.addWidget(self.output_dir_edit, 1)
+        output_row_layout.addWidget(self.output_dir_edit)
         output_row_layout.addWidget(self.browse_output_btn)
+        output_row_layout.setSpacing(8)
 
-        output_layout.addRow("Output Directory:", output_row_layout)
+        # Create container widget for the layout
+        output_widget = QWidget()
+        output_widget.setLayout(output_row_layout)
 
+        StandardFormLayout.add_form_field(
+            output_layout, "Output Directory:", output_widget
+        )
+
+        # Add checkboxes using unified approach
         self.use_same_dir_check = QCheckBox("Use same directory as input for output")
         self.use_same_dir_check.setChecked(True)
-        output_layout.addRow(self.use_same_dir_check)
+        StandardFormLayout.add_form_field(output_layout, "", self.use_same_dir_check)
 
         self.overwrite_check = QCheckBox("Overwrite existing CHD files if they exist")
         self.overwrite_check.setToolTip(
             "If checked, existing .chd files with the same name will be overwritten without prompting."
         )
-        output_layout.addRow(self.overwrite_check)
+        StandardFormLayout.add_form_field(output_layout, "", self.overwrite_check)
 
-        output_group.setLayout(output_layout)
         return output_group
 
     def _create_options_section(self) -> QGroupBox:
@@ -1308,7 +1375,11 @@ class CompressionTab(QWidget):
         self.media_type_combo = QComboBox()
         # Populate from COMPRESSION_PROFILES to ensure consistency
         media_types_from_profiles = sorted(
-            {p.get("media", "") for p in COMPRESSION_PROFILES.values() if p.get("media")}
+            {
+                str(p.get("media", ""))  # Ensure string conversion for sortable items
+                for p in COMPRESSION_PROFILES.values()
+                if p.get("media")
+            }
         )
         self.media_type_combo.addItems(["Auto Detect"] + media_types_from_profiles)
         self.media_type_combo.setToolTip(
@@ -1347,15 +1418,15 @@ class CompressionTab(QWidget):
         )  # Progress column not always last
         self.files_table.horizontalHeader().setSectionResizeMode(
             0,
-            QHeaderView.Stretch,  # CHANGED FROM QGroupBox.Stretch
+            QHeaderView.ResizeMode.Stretch,  # CHANGED FROM QGroupBox.Stretch
         )  # File name gets most space
         self.files_table.horizontalHeader().setSectionResizeMode(
             1,
-            QHeaderView.ResizeToContents,  # CHANGED FROM QGroupBox.ResizeToContents
+            QHeaderView.ResizeMode.ResizeToContents,  # CHANGED FROM QGroupBox.ResizeToContents
         )  # Status
         self.files_table.horizontalHeader().setSectionResizeMode(
             2,
-            QHeaderView.Stretch,  # CHANGED FROM QGroupBox.Stretch
+            QHeaderView.ResizeMode.Stretch,  # CHANGED FROM QGroupBox.Stretch
         )  # Progress bar also gets space
         self.files_table.setMinimumHeight(150)  # Ensure table is visible
         self.files_table.setSizePolicy(
@@ -1437,6 +1508,24 @@ class CompressionTab(QWidget):
 
         return actions_layout
 
+    def _create_action_buttons_list(self) -> List[QPushButton]:
+        """Create action buttons as a list for unified button bar."""
+        self.start_compression_btn = QPushButton("Start Compression")
+        self.start_compression_btn.setIcon(QIcon.fromTheme("media-playback-start"))
+        self.start_compression_btn.setDefault(True)  # Make it default for Enter key
+
+        self.stop_compression_btn = QPushButton("Cancel Operation")
+        self.stop_compression_btn.setIcon(QIcon.fromTheme("process-stop"))
+        self.stop_compression_btn.setEnabled(False)  # Initially disabled
+
+        self.cleanup_btn = QPushButton("Cleanup Temp Dirs")
+        self.cleanup_btn.setIcon(QIcon.fromTheme("user-trash"))
+        self.cleanup_btn.setToolTip(
+            "Manually remove any leftover temporary directories created by RetroClamp."
+        )
+
+        return [self.cleanup_btn, self.stop_compression_btn, self.start_compression_btn]
+
     def _connect_signals(self) -> None:
         """Connect widget signals to slots."""
         self.browse_input_btn.clicked.connect(self.browse_input)
@@ -1516,16 +1605,21 @@ class CompressionTab(QWidget):
     def _on_profile_changed(self, profile_name: str) -> None:
         """When compression profile changes, update the media type combo if a profile is selected."""
         if profile_name in COMPRESSION_PROFILES:
-            profile_media = COMPRESSION_PROFILES[profile_name].get("media")
+            profile_details = COMPRESSION_PROFILES[profile_name]
+            profile_media: Optional[str] = profile_details.get("media")
+
             if profile_media:
                 # Temporarily disconnect media_type_combo's signal to prevent feedback loop
                 try:
                     self.media_type_combo.currentTextChanged.disconnect(
                         self._on_media_type_manually_changed
                     )
-                except RuntimeError:  # Already disconnected or never connected
+                except RuntimeError:  # Thrown if not connected
                     pass
 
+                assert profile_media is not None, (
+                    "Type checker hint: profile_media is str here"
+                )
                 current_media_index = self.media_type_combo.findText(profile_media)
                 if current_media_index != -1:
                     self.media_type_combo.setCurrentIndex(current_media_index)
@@ -1583,7 +1677,13 @@ class CompressionTab(QWidget):
             elif extension in [".chd"]:  # Already compressed, but for info
                 # For CHD, need chdman info to know original type. Default to CD for now.
                 detected_media = "CD"  # Placeholder
-            elif extension in [".vhd", ".vmdk", ".raw", ".hdd", ".hdimage"]:
+            elif extension in [
+                ".vhd",
+                ".vmdk",
+                ".raw",
+                ".hdd",
+                ".hdimage",
+            ]:
                 detected_media = "Hard Disk"
 
             if detected_media != "unknown":
@@ -1606,9 +1706,7 @@ class CompressionTab(QWidget):
                 if target_profile_name in COMPRESSION_PROFILES:
                     self.compression_profile_combo.setCurrentText(target_profile_name)
                     # The _on_profile_changed will then set the media_type_combo
-                    self._on_profile_changed(
-                        target_profile_name
-                    )  # Manually trigger to update media_type_combo
+                    self._on_profile_changed(target_profile_name)
                 else:  # Fallback if specific default profile not found
                     # Find *any* profile matching the media type
                     found_matching_profile = False
@@ -1768,10 +1866,10 @@ class CompressionTab(QWidget):
                     self,
                     "Confirm Exit",
                     "Compression is in progress. Are you sure you want to exit? This will cancel ongoing tasks.",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
-                if reply == QMessageBox.Yes:
+                if reply == QMessageBox.StandardButton.Yes:
                     self.log_message(
                         "Closing while processing: attempting to cancel operations.",
                         "warning",
@@ -1826,16 +1924,6 @@ class CompressionTab(QWidget):
                 "cancelled by user",
             ]:
                 self.update_file_status(row, "Aborted")
-
-        try:
-            self.temp_manager.cleanup_all()
-            self.log_message("Temporary directories cleaned up after abort.", "debug")
-        except Exception as e:
-            self.log_message(f"Error cleaning up temporary directories: {e}", "error")
-            if self.logger:
-                self.logger.exception(
-                    "CompressionTab", "Temp directory cleanup failed."
-                )
 
         self.compression_finished.emit(False)  # Signal failure
         self._update_ui_state()

@@ -73,8 +73,8 @@ Used on Home screen and Tools grid. Consistent across both contexts.
 - **Background:** `#353749`
 - **Border:** `1px solid #44475a`
 - **Border-radius:** 12px
-- **Shadow:** `0 4px 20px rgba(0,0,0,0.5)`
-- **Hover:** border lifts to `#6272a4`, shadow deepens; cursor pointer
+- **Shadow:** `QGraphicsDropShadowEffect` — blur radius 20, offset (0, 4), color `rgba(0,0,0,0.5)`. Qt stylesheet does not support `box-shadow`; this effect is applied programmatically in `ActionCard.__init__`.
+- **Hover:** border lifts to `#6272a4`, shadow blur radius increases to 28; cursor set via `self.setCursor(Qt.PointingHandCursor)` in `__init__` (Qt stylesheet does not support `cursor` property)
 - **Contents (top to bottom):**
   1. Emoji icon — 38px
   2. Purple accent bar — 32px × 3px, `#bd93f9`, border-radius 2px
@@ -95,7 +95,7 @@ Used on Home screen and Tools grid. Consistent across both contexts.
   - Hover: `#313444` background, no border
   - Inactive: transparent
 - **Footer (bottom section):**
-  - Debug shortcut — 11px, `#6272a4`, opens debug log panel (drawer/dialog, not a page swap)
+  - Debug shortcut — 11px, `#6272a4`, opens `DebugDialog`: a modeless `QDialog` (non-blocking, stays open while the app is used) that surfaces `DebugLogger` output. Contains a scrollable `QPlainTextEdit` (monospace, `#f8f8f2` on `#1e1f29`, read-only) that auto-scrolls to the latest entry. `DebugLogger` writes to a rotating log file; `DebugDialog` tails it via a `QTimer` (250ms interval): on each tick, open the log file at a stored `_log_offset` byte position, read any new bytes, append decoded text to the `QPlainTextEdit`, and advance `_log_offset`. Footer row has a `[ Clear ]` button (calls `DebugLogger.clear_log()` — a new method added in this redesign that truncates the log file safely through the existing `RotatingFileHandler`; direct file truncation must not be used as the handler holds an open file descriptor on Windows) and a `[ Copy ]` button (copies current `QPlainTextEdit` text to clipboard). Not a page swap — the stacked widget index does not change.
   - Version label — `v1.2.0`, 11px, `#6272a4`
 
 ---
@@ -110,19 +110,19 @@ Used on Home screen and Tools grid. Consistent across both contexts.
 
 ### Action Cards
 
-| Card | Icon | Title | Description |
-|---|---|---|---|
-| 1 | 💿 | Compress | Create CHD from disc images |
-| 2 | 📦 | Batch | Process multiple files |
-| 3 | 📂 | Extract Archive | Unpack ZIPs, 7z, RARs |
+| Card | Icon | Title | Description | Destination |
+|---|---|---|---|---|
+| 1 | 💿 | Compress | Create CHD from disc images | `CompressionView` (index 1) |
+| 2 | 📦 | Batch | Process multiple files | `BatchView` (index 2) |
+| 3 | 📂 | Extract Archive | Unpack ZIPs, 7z, RARs | `CompressionView` (index 1) |
 
-Clicking a card navigates to the corresponding view (same as clicking the sidebar item).
+Clicking a card navigates to the corresponding view (same as clicking the sidebar item). "Extract Archive" opens `CompressionView` — the compression and extraction workflow share the same view.
 
 ### Recent Files Strip
 
 - Section label: "RECENT FILES" — 11px uppercase, `#6272a4`
-- Rows: file icon · filename (truncated) · console tag · relative timestamp
-- Clicking a row re-opens the file in Compression view
+- Rows: file icon · filename (truncated) · relative timestamp
+- Clicking a row calls `AppWindow.open_file(path)`, which navigates to `CompressionView` (index 1) and calls `CompressionView.load_file(path: str)` to pre-populate the source file list; console profile is set to Auto-detect
 - Hidden entirely if no history (no empty state placeholder)
 
 ---
@@ -174,7 +174,7 @@ Columns: status indicator · filename · detected console · state chip
 
 State chip colors:
 - Queued: `#6272a4`
-- Processing: `#8be9fd` (animated)
+- Processing: `#8be9fd` — `QPropertyAnimation(opacity_effect, b"opacity")` on `QGraphicsOpacityEffect`, pulsing 0.5→1.0→0.5, 800ms duration, loop count −1
 - Done: `#50fa7b`
 - Error: `#ff5555` + inline `[!]` expand button for error detail
 
@@ -203,16 +203,26 @@ Card grid (same Bold/Elevated cards as Home screen). Clicking a card opens the t
 | Card | Icon | Title | Status |
 |---|---|---|---|
 | 1 | 📋 | M3U Generator | Active |
-| 2 | 🔬 | BIOS Validator | Active |
-| 3 | — | (placeholder) | Coming soon |
+| 2 | 🎮 | ScummVM Generator | Active |
+| 3 | 🔬 | BIOS Validator | Coming soon |
 
-Coming-soon cards: 50% opacity, "Coming soon" in place of description, non-clickable.
+Coming-soon cards: `QGraphicsOpacityEffect(opacity=0.5)` applied programmatically to the card widget (Qt stylesheet `opacity` does not propagate to child widgets); "Coming soon" in place of description; non-clickable.
 
 ### Tool Detail Panel
 
 - `← Tools` back button in top-left
 - Tool panel is a self-contained `QWidget` loaded by the plugin system
 - Replaces the grid in the `ToolsView` content area (no separate window)
+
+### Plugin API Contract
+
+The existing `register_tab(main_window)` plugin API is incompatible with the new architecture. New contract:
+
+- **Method:** `register_panel(tools_view: ToolsView) -> QWidget`
+- **Argument:** `tools_view` — provided so plugins can trigger back-navigation via `tools_view.show_grid()`
+- **Return:** A self-contained `QWidget` that `ToolsView` embeds in its content area
+- `tools/plugin_template.py` must be updated to implement `register_panel`; this update is in scope for this redesign
+- **Plugin discovery:** `ToolsView` loads plugins via a hardcoded list: `TOOL_PLUGINS = [m3u_generator, scummvm_generator, bios_validator]`. No directory scanning. A plugin that returns `None` from `register_panel` is treated as unavailable — its card renders as coming-soon. `tools/bios_validator.py` is a stub module implementing `register_panel` that returns `None`, which produces the BIOS Validator coming-soon card without special-casing in `ToolsView`.
 
 ---
 
@@ -239,7 +249,31 @@ Mini two-column layout within the view: category list (left, ~180px) + content p
 
 ### Save Behavior
 
-Settings auto-save on change. A "Saved" flash (`#50fa7b`, fades after 1.5s) appears bottom-right of content panel after each change. No explicit Save button.
+Settings auto-save on change via `AppSettings.set(category, key, value)` (`modules/app_settings.py`). A "Saved" flash (`#50fa7b`, fades after 1.5s) appears bottom-right of content panel after each change. No explicit Save button.
+
+### AppSettings Keys Required
+
+New keys this redesign must add to `DEFAULT_SETTINGS` in `modules/app_settings.py`:
+
+| Category | Key | Type | Default | Notes |
+|---|---|---|---|---|
+| `appearance` *(new category)* | `theme` | str | `"dracula"` | Replaces `general.theme` — simultaneously remove `general.theme` from `DEFAULT_SETTINGS` and migrate any persisted value on first launch after upgrade |
+| `appearance` | `accent_color` | str | `"#bd93f9"` | — |
+| `appearance` | `font_size` | str | `"medium"` | — |
+| `general` | `reopen_last_session` | bool | `False` | — |
+| `general` | `worker_thread_count` | int | `2` | — |
+| `chdman` *(new category)* | `compression_level` | str | `""` | — |
+| `chdman` | `verify_checksum` | bool | `True` | — |
+
+Existing keys used directly (no changes needed): `paths.chdman_path`, `paths.last_input_directory`, `paths.last_output_directory`, `batch.max_concurrent_jobs`, `logging.level`.
+
+**Notes on existing keys and key interactions:**
+
+- **`logging.log_level`**: `debug_logger.py` currently reads `logging.log_level` (not `logging.level`) at runtime — this is a pre-existing inconsistency between `DEFAULT_SETTINGS` and the actual read path. It is out of scope for this redesign. If `SettingsView` surfaces a log verbosity control, wire it to `logging.log_level`.
+- **`general.theme` migration**: The existing `general.theme` key must be removed and replaced by `appearance.theme` (added in this redesign). Migration logic should run on first launch after upgrade; if `general.theme` is present, copy its value to `appearance.theme` then remove `general.theme`.
+- **`chdman.verify_checksum`**: Stored and surfaced in `SettingsView`. Note: `core/chdman.py` does not currently implement a `--noverify` flag, and `core/` is out of scope for this redesign. The setting is therefore inert at runtime in this release — it will be wired to actual CHDMAN behavior in a future update that includes `core/` changes. This is distinct from `compression.verify_after_compression` (a separate existing key that triggers post-operation output verification).
+- **`general.worker_thread_count`**: Governs `CHDManager`'s internal `QThreadPool` maximum thread count. There is no single global worker pool — each manager owns a private `QThreadPool`. `CHDManager.__init__` must be updated to read this setting and call `self.thread_pool.setMaxThreadCount(value)` on startup. This is distinct from `batch.max_concurrent_jobs` (the number of parallel CHD jobs within a single batch run), which is an existing key with no changes needed.
+- **`chdman.compression_level`**: `core/chdman.py` types `compression_level` as `Optional[str]`, accepting CHDMAN codec strings (e.g. `"zstd"`, `"zlib"`, `"lzma"`). The empty string default means no override — CHDMAN uses its built-in default. The `SettingsView` CHDMAN panel must expose a codec dropdown, not a numeric slider.
 
 ---
 
@@ -265,14 +299,46 @@ gui/
     └── status_chip.py     # Colored state indicator chip
 ```
 
+### New files in `tools/` (to create)
+
+```
+tools/
+├── m3u_generator.py       # Extracted from gui/m3u_tab.py; implements register_panel
+└── bios_validator.py      # Stub; register_panel returns None (produces coming-soon card)
+```
+
+`tools/plugin_template.py` — **update** to implement `register_panel` API (not a new file).
+
+### Existing files to update
+
+```
+tools/__init__.py              # CRITICAL: Replace register_tab detection (lines 109-111) and dispatch (line 192)
+                               #   with register_panel. Without this, all per-plugin changes have no effect.
+tools/scummvm_generator.py     # Replace register_tab(parent_widget) with register_panel(tools_view) -> QWidget
+```
+
+**Coordinated updates required** — these files reference `register_tab` and must be updated in the same change set to stay consistent. They are outside the GUI redesign scope but must not be left with broken references:
+
+| File | Reference type |
+|---|---|
+| `quality_gates.py` | Validates plugin compliance (lines 451–452, 532) |
+| `retroclamp_analyzer.py` | Plugin analysis check (line 308) |
+| `focused_analysis.py` | Plugin report logic (lines 276, 329, 333, 343, 347) |
+| `tests/plugins/test_plugin_template.py` | Plugin template compliance test (lines 38–41) |
+| `scripts/validate_plugins.py` | Standalone validation script (lines 28–29) |
+| `README.md` | Plugin API documentation (line 172) |
+
 ### Files to retire (after replacement complete)
 
 ```
-gui/compress_tab.py
+gui/compression_tab.py
+gui/extraction_tab.py    # functionality absorbed into compression_view.py
 gui/batch_tab.py
 gui/tools_tab.py
+gui/m3u_tab.py
 gui/theme_tab.py
-gui/debug_tab.py
+gui/home_tab.py
+gui/settings_tab.py
 ```
 
 `main.py` updated to instantiate `AppWindow` instead of the old tab-based window.
@@ -285,4 +351,4 @@ gui/debug_tab.py
 - Theme editor (v1.4.0+)
 - Free-form color picker in Appearance settings
 - Animated view transitions
-- New tool implementations beyond M3U Generator and BIOS Validator stubs
+- New tool implementations beyond M3U Generator and ScummVM Generator stubs (BIOS Validator is Coming soon)

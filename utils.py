@@ -10,7 +10,14 @@ from typing import Any, List, Optional, Tuple, TypeVar, cast
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import (
+    QApplication,  # Added import for QApplication
+    QFileDialog,
+    QInputDialog,
+    QLineEdit,  # Added import for QLineEdit to use QLineEdit.EchoMode
+    QMessageBox,
+    QWidget,
+)
 
 # Type variable for generic type hinting
 T = TypeVar("T")
@@ -36,6 +43,25 @@ def setup_logging(level=logging.INFO, log_file: Optional[str] = None) -> None:
     )
 
 
+# Helper function to satisfy mypy's strict parent widget requirement
+def _get_effective_parent(parent: Optional[QWidget]) -> QWidget:
+    """
+    Returns the provided parent if not None, otherwise QApplication.activeWindow().
+    This helps satisfy mypy's strictness for QWidget arguments in some static methods
+    while still allowing Optional[QWidget] in the function signature.
+    """
+    if parent is None:
+        # Fallback to the currently active window if no parent is explicitly provided.
+        # This is a common pattern for dialogs that need a parent for modality/positioning.
+        active_window = QApplication.activeWindow()
+        if active_window:
+            return active_window
+        # As a last resort, if no active window is available, create a dummy widget.
+        # This case should be rare in a running application.
+        return QWidget()
+    return parent
+
+
 def show_info(
     message: str, title: str = "Information", parent: Optional[QWidget] = None
 ) -> None:
@@ -46,7 +72,8 @@ def show_info(
         title: Window title (default: "Information")
         parent: Parent widget (optional)
     """
-    QMessageBox.information(parent, title, message)
+    # Fix: Pass the effective parent to satisfy mypy
+    QMessageBox.information(_get_effective_parent(parent), title, message)
 
 
 def show_error(
@@ -59,7 +86,8 @@ def show_error(
         title: Window title (default: "Error")
         parent: Parent widget (optional)
     """
-    QMessageBox.critical(parent, title, message)
+    # Fix: Pass the effective parent to satisfy mypy
+    QMessageBox.critical(_get_effective_parent(parent), title, message)
 
 
 def show_warning(
@@ -72,14 +100,18 @@ def show_warning(
         title: Window title (default: "Warning")
         parent: Parent widget (optional)
     """
-    QMessageBox.warning(parent, title, message)
+    # Fix: Pass the effective parent to satisfy mypy
+    QMessageBox.warning(_get_effective_parent(parent), title, message)
 
 
 def show_question(
     message: str,
     title: str = "Confirm",
-    buttons: QMessageBox.StandardButton = QMessageBox.Yes | QMessageBox.No,
-    default_button: QMessageBox.StandardButton = QMessageBox.NoButton,
+    # Fix: Use QMessageBox.StandardButton enum for buttons
+    buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Yes
+    | QMessageBox.StandardButton.No,
+    # Fix: Use QMessageBox.StandardButton enum for default_button
+    default_button: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
     parent: Optional[QWidget] = None,
 ) -> QMessageBox.StandardButton:
     """Show a question dialog with Yes/No buttons.
@@ -94,7 +126,10 @@ def show_question(
     Returns:
         QMessageBox.StandardButton: The button that was clicked
     """
-    return QMessageBox.question(parent, title, message, buttons, default_button)
+    # Fix: Pass the effective parent to satisfy mypy
+    return QMessageBox.question(
+        _get_effective_parent(parent), title, message, buttons, default_button
+    )
 
 
 def get_open_file_name(
@@ -103,7 +138,8 @@ def get_open_file_name(
     dir: str = "",
     filter: str = "All Files (*)",
     selected_filter: str = "",
-    options: QFileDialog.Option = None,
+    # Fix: Type hint must be Optional because default is None (mypy's no_implicit_optional)
+    options: Optional[QFileDialog.Option] = None,
 ) -> Tuple[str, str]:
     """Show a file open dialog and return the selected file.
 
@@ -132,7 +168,8 @@ def get_save_file_name(
     dir: str = "",
     filter: str = "All Files (*)",
     selected_filter: str = "",
-    options: QFileDialog.Option = None,
+    # Fix: Type hint must be Optional because default is None
+    options: Optional[QFileDialog.Option] = None,
 ) -> Tuple[str, str]:
     """Show a file save dialog and return the selected file.
 
@@ -159,7 +196,8 @@ def get_existing_directory(
     parent: Optional[QWidget] = None,
     caption: str = "Select Directory",
     dir: str = "",
-    options: QFileDialog.Option = None,
+    # Fix: Type hint must be Optional because default is None
+    options: Optional[QFileDialog.Option] = None,
 ) -> str:
     """Show a directory selection dialog and return the selected directory.
 
@@ -173,7 +211,7 @@ def get_existing_directory(
         str: Selected directory or "" if canceled
     """
     if options is None:
-        options = QFileDialog.ShowDirsOnly
+        options = QFileDialog.Option(QFileDialog.Option.ShowDirsOnly)
     return str(QFileDialog.getExistingDirectory(parent, caption, dir, options))
 
 
@@ -182,9 +220,12 @@ def get_text_input(
     title: str = "Input",
     label: str = "Enter text:",
     text: str = "",
-    echo: int = 2,  # QLineEdit.Normal
-    flags: Qt.WindowType = None,
-    input_method_hints: Qt.InputMethodHint = None,
+    # Fix: Use QLineEdit.EchoMode enum instead of int
+    echo: QLineEdit.EchoMode = QLineEdit.EchoMode.Normal,
+    # Fix: Type hint must be Optional because default is None
+    flags: Optional[Qt.WindowType] = None,
+    # Fix: Type hint must be Optional because default is None
+    input_method_hints: Optional[Qt.InputMethodHint] = None,
 ) -> str:
     """Show a text input dialog and return the entered text.
 
@@ -204,8 +245,15 @@ def get_text_input(
         flags = Qt.WindowType(0)
     if input_method_hints is None:
         input_method_hints = Qt.InputMethodHint(0)
+    # Fix: Pass the effective parent to satisfy mypy
     text, ok = QInputDialog.getText(
-        parent, title, label, echo, text, flags, input_method_hints
+        _get_effective_parent(parent),
+        title,
+        label,
+        echo,
+        text,
+        flags,
+        input_method_hints,
     )
     return str(text) if ok else ""
 
@@ -217,8 +265,10 @@ def get_item_input(
     items: Optional[List[Any]] = None,
     current: int = 0,
     editable: bool = True,
-    flags: Qt.WindowType = None,
-    input_method_hints: Qt.InputMethodHint = None,
+    # Fix: Type hint must be Optional because default is None
+    flags: Optional[Qt.WindowType] = None,
+    # Fix: Type hint must be Optional because default is None
+    input_method_hints: Optional[Qt.InputMethodHint] = None,
 ) -> Tuple[str, bool]:
     """Show an item selection dialog and return the selected item.
 
@@ -241,8 +291,16 @@ def get_item_input(
         flags = Qt.WindowType(0)
     if input_method_hints is None:
         input_method_hints = Qt.InputMethodHint.ImhNone
+    # Fix: Pass the effective parent to satisfy mypy
     result = QInputDialog.getItem(
-        parent, title, label, items, current, editable, flags, input_method_hints
+        _get_effective_parent(parent),
+        title,
+        label,
+        items,
+        current,
+        editable,
+        flags,
+        input_method_hints,
     )
     return (str(result[0]), bool(result[1]))
 
@@ -260,16 +318,19 @@ def create_icon_from_svg(svg_data: str, color: Optional[QColor] = None) -> QIcon
     # Create a buffer with the SVG data
     svg_bytes = QByteArray(svg_data.encode("utf-8"))
     buffer = QBuffer(svg_bytes)
-    buffer.open(QIODevice.ReadOnly)
+    # Fix: Use QIODevice.OpenModeFlag enum for ReadOnly
+    buffer.open(QIODevice.OpenModeFlag.ReadOnly)
 
     # Create a pixmap from the SVG
     renderer = QSvgRenderer()
-    if not renderer.load(buffer):
+    # Fix: QSvgRenderer.load expects QByteArray or str, not QBuffer
+    if not renderer.load(svg_bytes):
         return QIcon()
 
     # Create a pixmap and paint the SVG onto it
     pixmap = QPixmap(renderer.defaultSize())
-    pixmap.fill(Qt.transparent)
+    # Fix: Use Qt.GlobalColor enum for transparent
+    pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
     renderer.render(painter)
@@ -282,10 +343,11 @@ def create_icon_from_svg(svg_data: str, color: Optional[QColor] = None) -> QIcon
             for y in range(image.height()):
                 pixel_color = image.pixelColor(x, y)
                 if pixel_color.alpha() > 0:  # Only recolor non-transparent pixels
-                    pixel_color.setRed(color.red())
-                    pixel_color.setGreen(color.green())
-                    pixel_color.setBlue(color.blue())
-                    image.setPixelColor(x, y, pixel_color)
+                    # Preserve original alpha when applying new color
+                    new_color = QColor(
+                        color.red(), color.green(), color.blue(), pixel_color.alpha()
+                    )
+                    image.setPixelColor(x, y, new_color)
         pixmap = QPixmap.fromImage(image)
 
     return QIcon(pixmap)
@@ -310,4 +372,9 @@ def human_readable_size(size_bytes: int) -> str:
         size /= 1024.0
         i += 1
 
-    return f"{size_bytes:.2f} {units[i]}"
+    # Fix: Format the 'size' variable (float) to 2 decimal places for larger units.
+    # For 'B' (bytes), format as an integer.
+    if i == 0:
+        return f"{int(size)} {units[i]}"
+    else:
+        return f"{size:.2f} {units[i]}"

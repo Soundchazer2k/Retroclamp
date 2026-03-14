@@ -2,8 +2,15 @@
 RetroClamp Plugin Template
 -------------------------
 Use this template as a starting point for new RetroClamp tool plugins.
-Fill in the required metadata and implement the register_tab function.
+Fill in the required metadata and implement the register_panel function.
 """
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QWidget
 
 # === Plugin Metadata ===
 #: Name of the plugin (required for plugin discovery)
@@ -19,13 +26,11 @@ PLUGIN_DESCRIPTION = "Describe what your plugin does."
 PLUGIN_AUTHOR = "Your Name"
 
 #: List dependencies for this plugin (by module name, optional)
-from typing import Dict, List
-
-PLUGIN_DEPENDENCIES: List[str] = []
+PLUGIN_DEPENDENCIES: list[str] = []
 
 #: Define expected config keys and types for validation (optional)
 #: Example: {"max_workers": int, "log_level": str}
-PLUGIN_CONFIG_SCHEMA: Dict[str, type] = {}
+PLUGIN_CONFIG_SCHEMA: dict[str, type] = {}
 
 #: Minimum compatible RetroClamp app version (inclusive, optional)
 PLUGIN_MIN_APP_VERSION = "1.0.0"
@@ -34,29 +39,26 @@ PLUGIN_MIN_APP_VERSION = "1.0.0"
 PLUGIN_MAX_APP_VERSION = "2.0.0"
 
 
-def register_tab(main_window):
-    """
-    Register the plugin's tab with the main application window.
+def register_panel(tools_view: QWidget) -> QWidget:
+    """Register this plugin and return its panel widget.
 
-    This function is called by the plugin system to add your plugin's UI
-    as a new tab in the application's tools section. It expects the main window
-    to have a `tools_tab` attribute with a `tab_widget` (QTabWidget).
+    This function is called by the plugin system to obtain your plugin's UI
+    widget for embedding in the Tools view.
 
     Args:
-        main_window: The main application window instance.
-    """
-    # from gui.my_plugin_tab import MyPluginTab
-    # if hasattr(main_window, "tools_tab") and \
-    #     hasattr(main_window.tools_tab, "tab_widget"):
-    #     tab = MyPluginTab(main_window.tools_tab)
-    #     main_window.tools_tab.tab_widget.addTab(tab, "My Plugin")
-    #     print(
-    #         "My Plugin tab registered."
-    #     )
-    # else:
-    #     print(
-    #         "Could not register My Plugin tab: tools_tab or tab_widget not found "
-    #         "on main_window."
+        tools_view: The ToolsView instance that will host this panel.
 
-    #     )
-    pass
+    Returns:
+        A QWidget subclass representing this plugin's full UI panel.
+
+    Example::
+
+        from PySide6.QtWidgets import QWidget
+        from gui.my_plugin_panel import MyPluginPanel
+
+        def register_panel(tools_view: "QWidget") -> "QWidget":
+            return MyPluginPanel()
+    """
+    from PySide6.QtWidgets import QWidget  # noqa: PLC0415
+
+    return QWidget()  # Replace with your actual panel widget

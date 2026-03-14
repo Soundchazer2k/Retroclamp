@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RetroClamp Card Style Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #282a36;
+    color: #f8f8f2;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 32px;
+  }
+  h1 { font-size: 18px; color: #bd93f9; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .subtitle { font-size: 13px; color: #6272a4; margin-bottom: 32px; }
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #6272a4;
+    margin-bottom: 14px;
+    margin-top: 28px;
+  }
+  .cards-row { display: flex; gap: 16px; margin-bottom: 8px; }
+
+  .card-subtle {
+    background: #313444; border: 1px solid #44475a;
+    border-radius: 10px; padding: 20px; width: 180px;
+  }
+  .card-bold {
+    background: #353749; border: 1px solid #44475a;
+    border-radius: 12px; padding: 22px; width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  }
+  .card-bold .accent-bar {
+    width: 32px; height: 3px; background: #bd93f9;
+    border-radius: 2px; margin-bottom: 14px;
+  }
+  .card-outline {
+    background: transparent; border: 1.5px solid #44475a;
+    border-top: 2.5px solid #bd93f9;
+    border-radius: 12px; padding: 20px; width: 180px;
+  }
+
+  .icon { font-size: 26px; margin-bottom: 12px; }
+  .label { font-size: 14px; font-weight: 600; color: #f8f8f2; margin-bottom: 4px; }
+  .desc { font-size: 12px; color: #6272a4; }
+
+  .legend {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-top: 24px; padding-top: 24px;
+    border-top: 1px solid #44475a;
+  }
+  .legend-letter { font-size: 13px; font-weight: 700; color: #bd93f9; margin-bottom: 4px; }
+  .legend-desc { font-size: 11px; color: #6272a4; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>Question 4 — Card Visual Style</h1>
+<p class="subtitle">Which aesthetic fits the feel you're going for?</p>
+
+<div class="section-label">Option A — Subtle / Filled</div>
+<div class="cards-row">
+  <div class="card-subtle"><div class="icon">💿</div><div class="label">Compress</div><div class="desc">Create CHD archives</div></div>
+  <div class="card-subtle"><div class="icon">📦</div><div class="label">Batch</div><div class="desc">Process multiple files</div></div>
+  <div class="card-subtle"><div class="icon">🔧</div><div class="label">Tools</div><div class="desc">Utilities &amp; generators</div></div>
+</div>
+
+<div class="section-label">Option B — Bold / Elevated (shadow + purple accent bar)</div>
+<div class="cards-row">
+  <div class="card-bold"><div class="icon">💿</div><div class="accent-bar"></div><div class="label">Compress</div><div class="desc">Create CHD archives</div></div>
+  <div class="card-bold"><div class="icon">📦</div><div class="accent-bar"></div><div class="label">Batch</div><div class="desc">Process multiple files</div></div>
+  <div class="card-bold"><div class="icon">🔧</div><div class="accent-bar"></div><div class="label">Tools</div><div class="desc">Utilities &amp; generators</div></div>
+</div>
+
+<div class="section-label">Option C — Outlined / Flat (border-only, purple top accent)</div>
+<div class="cards-row">
+  <div class="card-outline"><div class="icon">💿</div><div class="label">Compress</div><div class="desc">Create CHD archives</div></div>
+  <div class="card-outline"><div class="icon">📦</div><div class="label">Batch</div><div class="desc">Process multiple files</div></div>
+  <div class="card-outline"><div class="icon">🔧</div><div class="label">Tools</div><div class="desc">Utilities &amp; generators</div></div>
+</div>
+
+<div class="legend">
+  <div><div class="legend-letter">A — Subtle</div><div class="legend-desc">Soft fill, thin border. Low visual weight. Professional, almost invisible chrome.</div></div>
+  <div><div class="legend-letter">B — Bold</div><div class="legend-desc">Deep shadow, purple accent bar. High visual impact, clearly elevated from background.</div></div>
+  <div><div class="legend-letter">C — Outlined</div><div class="legend-desc">No fill, border-only with purple top. Minimal and modern, very clean.</div></div>
+</div>
+</body>
+</html>

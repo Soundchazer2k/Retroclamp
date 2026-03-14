@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 from gui.m3u_tab import M3UTab
 from tools.scummvm_generator import ScummVMGenerator
 
-print("RUNNING tools_tab.py FROM:", __file__)
+# Debug print removed - was causing early execution
 
 
 class ToolsTab(QWidget):
@@ -17,32 +17,9 @@ class ToolsTab(QWidget):
         layout.setSpacing(0)
 
         # --- QTabWidget for Tool Panels ---
+        # Create tab widget (styling handled by unified stylesheet)
         self.tab_widget = QTabWidget()
         self.tab_widget.setObjectName("toolsTabWidget")
-        # Match tab styling to compression section
-        # (if needed, copy stylesheet from main.py)
-        self.tab_widget.setStyleSheet(
-            """
-            QTabBar::tab {
-                padding: 8px 16px;
-                margin-right: 2px;
-                border: 1px solid #444;
-                border-bottom: none;
-                border-radius: 4px 4px 0 0;
-                background: #333;
-                color: #ccc;
-            }
-            QTabBar::tab:selected {
-                background: #6272a4;
-                color: #f8f8f2;
-                font-weight: bold;
-            }
-            QTabWidget::pane {
-                border: 1px solid #444;
-                top: -1px;
-            }
-        """
-        )
 
         self.m3u_tab = M3UTab(self)
         self.scummvm_tab = ScummVMGenerator(self)

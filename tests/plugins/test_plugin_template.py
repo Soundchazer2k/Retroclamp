@@ -35,10 +35,10 @@ class TestPlugin(unittest.TestCase):
         self.assertIsInstance(self.plugin.PLUGIN_NAME, str)
         self.assertIsInstance(self.plugin.PLUGIN_VERSION, str)
 
-    def test_register_tab_callable(self):
-        """Test that the register_tab function exists and is callable."""
-        self.assertTrue(hasattr(self.plugin, "register_tab"))
-        self.assertTrue(callable(self.plugin.register_tab))
+    def test_register_panel_callable(self):
+        """Test that the register_panel function exists and is callable."""
+        self.assertTrue(hasattr(self.plugin, "register_panel"))
+        self.assertTrue(callable(self.plugin.register_panel))
 
     # Add more tests here as needed for your plugin's specific logic
 

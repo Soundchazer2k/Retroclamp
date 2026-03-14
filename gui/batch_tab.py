@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """
 Batch Processing Tab for RetroClamp.
 
@@ -7,7 +5,7 @@ This module provides the batch processing interface for RetroClamp,
 allowing users to process multiple files at once.
 """
 
-import logging
+import logging  # Standard logging
 import os
 import tempfile
 import time
@@ -16,39 +14,62 @@ import traceback
 # Import archive handling libraries
 import zipfile
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union  # Added Union
 
 import py7zr
-import rarfile
-from PySide6.QtCore import QMutex, Qt, QThread, QTimer, QWaitCondition, Signal
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+import rarfile  # type: ignore[import-untyped] # rarfile may not have type stubs
+from PySide6.QtCore import (
+    QByteArray,
+    QSettings,  # Added QSettings
+    Qt,
+    QThread,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
+from PySide6.QtGui import (  # Added QCloseEvent
+    QCloseEvent,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QGuiApplication,
+)
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QTableWidget,
     QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from core.archive import ArchiveManager
-from core.chdman import CHDCompressionType, CHDMan, CHDTask, CHDTaskType
+from core.archive import ArchiveManager, ArchiveWorker
+from core.chdman import (
+    CHDCompressionType,
+    CHDMan,
+    CHDManSignals,  # Assuming this is needed by CHDMan methods
+    CHDManWorker,
+    CHDTaskType,
+)
 from core.checkpoint_manager import CheckpointManager
-from core.debug_logger import get_logger
-from core.file_scanner import FileScanner
+from core.debug_logger import (
+    DebugLogger,
+    get_logger,
+)
+from core.file_scanner import (
+    FileScanner,  # Assuming this is needed by FileScanner methods
+)
 
 # Import UI components and utilities
-from modules.ui_functions import load_svg_icon
+from gui.ui_functions import get_icon
 from utils import show_error, show_info, show_warning
 
 # Constants for settings
@@ -58,17 +79,12 @@ SETTINGS_BATCH = "BatchProcessing"
 
 
 class BatchWorker(QThread):
-    """Worker thread for batch processing tasks.
+    """Worker thread for batch processing tasks (using CHDMAN directly)."""
 
-    This class handles the actual file processing in a background thread,
-    including compression and extraction operations using CHDMAN.
-    """
-
-    # Signals for communication with the main thread
-    progress = Signal(int, str)  # progress_percent, status
-    error = Signal(str, str)  # error_message, file_path
-    finished = Signal()  # Emitted when processing is complete
-    file_completed = Signal(str, str)  # file_path, status_message
+    progress = Signal(int, str)
+    error = Signal(str, str)
+    finished = Signal()
+    file_completed = Signal(str, str)
 
     def __init__(
         self,
@@ -77,2204 +93,1521 @@ class BatchWorker(QThread):
         operation: str,
         compression: CHDCompressionType = CHDCompressionType.ZLIB,
         verify: bool = False,
-        parent=None,
+        parent: Optional[QWidget] = None,
     ):
-        """Initialize the BatchWorker.
-
-        Args:
-            file_path: Path to the file to process
-            output_dir: Directory to save the output file
-            operation: Operation to perform ('compress' or 'extract')
-            compression: Compression algorithm to use (default: 'zlib')
-            verify: Whether to verify the output file (default: False)
-            parent: Parent widget (optional)
-        """
         super().__init__(parent)
         self.file_path = file_path
         self.output_dir = output_dir
-        self.operation = operation.lower()
-        self.compression = (
-            compression.value
-            if isinstance(compression, CHDCompressionType)
-            else compression
-        )
-        self.verify = verify
+        self.operation_str = operation.lower()
+        self.compression_enum = compression
+        self.verify_output = verify
         self._is_running = True
-        self._is_paused = False
-        self._pause_cond = QWaitCondition()
-        self._mutex = QMutex()
+        self.chdman_worker_instance: Optional[CHDManWorker] = None
 
     def run(self):
-        """Main processing method that runs in a separate thread."""
-        # Log all key paths and operation info to error.log (for debugging)
         try:
             with open("error.log", "a", encoding="utf-8") as logf:
                 logf.write(f"\n[BatchWorker] Starting run at: {datetime.now()}\n")
-                logf.write(f"  Operation: {self.operation}\n")
+                logf.write(f"  Operation: {self.operation_str}\n")
                 logf.write(f"  Input file: {self.file_path}\n")
                 logf.write(f"  Output dir: {self.output_dir}\n")
-                logf.write(f"  Compression: {self.compression}\n")
-                logf.write(f"  Verify: {self.verify}\n")
+                logf.write(f"  Compression: {self.compression_enum.name}\n")
+                logf.write(f"  Verify: {self.verify_output}\n")
             logging.info(
-                f"[BatchWorker] Launching: {self.operation} -i "
-                f"{self.file_path} -o {self.output_dir}"
+                f"[BatchWorker] Launching: {self.operation_str} -i '{self.file_path}' -o '{self.output_dir}'"
             )
         except Exception as logex:
-            # If logging fails, just print
             print(f"[BatchWorker] Failed to log start: {logex}")
+
         try:
-            # Create output directory if it doesn't exist
-            os.makedirs(self.output_dir, exist_ok=True)
+            Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+            input_filename = Path(self.file_path).name
+            base_name = Path(input_filename).stem
+            output_file_path = ""
 
-            # Determine output path
-            input_filename = os.path.basename(self.file_path)
-            base_name = os.path.splitext(input_filename)[0]
+            chdman_instance = CHDMan()
 
-            if self.operation == "compress":
-                output_path = os.path.join(self.output_dir, f"{base_name}.chd")
-                self._compress_file(self.file_path, output_path)
-            elif self.operation == "extract":
-                if self.file_path.lower().endswith(".chd"):
-                    output_path = os.path.join(self.output_dir, f"{base_name}.bin")
-                    self._extract_file(self.file_path, output_path)
-                else:
-                    raise ValueError("Only CHD files can be extracted")
+            if self.operation_str == CHDTaskType.COMPRESS.name.lower():
+                output_file_path = str(Path(self.output_dir) / f"{base_name}.chd")
+                if Path(output_file_path).exists():
+                    self.file_completed.emit(
+                        self.file_path, f"Skipped (exists): {output_file_path}"
+                    )
+                    self.progress.emit(100, "Skipped")
+                    self.finished.emit()  # Ensure finished is emitted even on skip
+                    return
+
+                # Assuming create_cd returns a tuple (signals, worker_instance)
+                signals: CHDManSignals
+                chd_worker: CHDManWorker
+                signals, chd_worker = chdman_instance.create_cd(
+                    input_file=self.file_path,
+                    output_file=output_file_path,
+                    compression=self.compression_enum,
+                )
+                self.chdman_worker_instance = chd_worker
+                signals.progress_updated.connect(self._chd_progress_callback)
+                signals.finished.connect(
+                    lambda s, m: self._chd_finished_callback(s, m, output_file_path)
+                )
+                signals.error.connect(
+                    lambda err_msg: self.error.emit(err_msg, self.file_path)
+                )
+                if self._is_running:
+                    chd_worker.start()
+                if self._is_running:
+                    chd_worker.wait()
+
+            elif self.operation_str.startswith(
+                CHDTaskType.EXTRACT_CD.name.lower().split("_")[0]  # "extract"
+            ):
+                if not self.file_path.lower().endswith(".chd"):
+                    raise ValueError("Input for extraction must be a .chd file.")
+                output_file_path = str(
+                    Path(self.output_dir) / f"{base_name}.bin"
+                )  # Default, may need adjustment
+                if Path(output_file_path).exists():
+                    self.file_completed.emit(
+                        self.file_path, f"Skipped (exists): {output_file_path}"
+                    )
+                    self.progress.emit(100, "Skipped")
+                    self.finished.emit()
+                    return
+
+                signals: CHDManSignals
+                chd_worker: CHDManWorker  # Type hint for clarity
+                # This part needs to map self.operation_str to the correct CHDMan extract method
+                if self.operation_str == CHDTaskType.EXTRACT_CD.name.lower():
+                    signals, chd_worker = chdman_instance.extract_cd(
+                        input_file=self.file_path, output_file=output_file_path
+                    )
+                # Add elif for EXTRACT_DVD, EXTRACT_HD, EXTRACT_RAW if BatchWorker is to handle them
+                # For example:
+                # elif self.operation_str == CHDTaskType.EXTRACT_HD.name.lower():
+                #     signals, chd_worker = chdman_instance.extract_hd(...)
+                else:  # Fallback or error for unhandled extract types by BatchWorker
+                    raise ValueError(
+                        f"Specific extract operation '{self.operation_str}' not implemented in BatchWorker."
+                    )
+
+                self.chdman_worker_instance = chd_worker
+                signals.progress_updated.connect(self._chd_progress_callback)
+                signals.finished.connect(
+                    lambda s, m: self._chd_finished_callback(s, m, output_file_path)
+                )
+                signals.error.connect(
+                    lambda err_msg: self.error.emit(err_msg, self.file_path)
+                )
+                if self._is_running:
+                    chd_worker.start()
+                if self._is_running:
+                    chd_worker.wait()
             else:
-                raise ValueError(f"Unknown operation: {self.operation}")
-
-            # Verify the output file if requested
-            if self.verify and os.path.exists(output_path):
-                self.progress.emit(95, "Verifying output file...")
-                # TODO: Implement verification logic
-                # Simulate verification delay (non-blocking)
-                # TODO: Implement actual verification logic here using
-                # signals/slots or async
-                pass
-
-            self.file_completed.emit(self.file_path, "Completed successfully")
-            self.progress.emit(100, f"Completed {self.operation}ion")
-
+                raise ValueError(
+                    f"Unknown operation for BatchWorker: {self.operation_str}"
+                )
+            # Verification is complex and would happen after _chd_finished_callback confirms success.
+            # For now, it's a placeholder.
         except Exception as e:
             tb = traceback.format_exc()
-            # Log to error.log
-            with open("error.log", "a", encoding="utf-8") as logf:
-                logf.write(f"\n[BatchWorker] Uncaught exception at: {datetime.now()}\n")
-                logf.write(tb)
-            error_msg = f"{str(e)}\n{tb}"
-            self.error.emit(error_msg, self.file_path)
-            self.progress.emit(0, f"Error: {error_msg}")
-        finally:
-            self.finished.emit()
+            # Log to file
+            try:
+                with open("error.log", "a", encoding="utf-8") as logf:
+                    logf.write(
+                        f"\n[BatchWorker] Exception in run: {datetime.now()}\n{tb}"
+                    )
+            except Exception:
+                pass  # Ignore logging errors
+            self.error.emit(f"{str(e)}\n{tb}", self.file_path)
+            self.progress.emit(0, f"Error: {str(e)}")
+            self.finished.emit()  # Ensure finished is emitted on error too
 
-    def _compress_file(self, input_path: str, output_path: str):
-        """Compress a file to CHD format."""
-        logging.info(f"BatchWorker compressing {input_path} to {output_path}")
-        self.progress.emit(5, "Starting compression...")
+    def _chd_progress_callback(self, percent: float, status_msg: str):
+        if self._is_running:
+            self.progress.emit(int(percent), status_msg)
 
-        # Check if output file already exists
-        if os.path.exists(output_path):
-            raise FileExistsError(f"Output file already exists: {output_path}")
+    def _chd_finished_callback(
+        self, success: bool, message: str, output_path_final: str
+    ):
+        if (
+            not self._is_running and not success
+        ):  # If stopped and failed, message might be "cancelled"
+            self.error.emit(
+                f"CHDMAN operation stopped/cancelled: {message}", self.file_path
+            )
+        elif success:
+            self.file_completed.emit(
+                self.file_path, f"Completed: {Path(output_path_final).name}"
+            )
+        else:  # Failed but was not stopped externally
+            self.error.emit(f"CHDMAN failed: {message}", self.file_path)
+        self.finished.emit()
 
-        # Create a CHDMan instance
-        chdman_instance = CHDMan()
+    def pause_processing(self):
+        if self.chdman_worker_instance and hasattr(
+            self.chdman_worker_instance, "pause"
+        ):
+            self.chdman_worker_instance.pause()
+            current_progress, _ = self.chdman_worker_instance.get_progress()
+            self.progress.emit(current_progress, "Paused by user")
 
-        # Perform the compression
-        # Use the correct method for compression (e.g., create_cd, create_dvd, etc.)
-        # Explicitly type the worker to help mypy
-        worker: CHDManWorker = chdman_instance.create_cd(
-            input_file=input_path,
-            output_file=output_path,
-            compression=self.compression,
-        )
-        worker.signals.progress_updated.connect(self._progress_callback)
+    def resume_processing(self):
+        if self.chdman_worker_instance and hasattr(
+            self.chdman_worker_instance, "resume"
+        ):
+            self.chdman_worker_instance.resume()
+            current_progress, _ = self.chdman_worker_instance.get_progress()
+            self.progress.emit(current_progress, "Resumed by user")
 
-    def _extract_file(self, input_path: str, output_path: str):
-        """Extract a CHD file."""
-        logging.info(f"BatchWorker extracting {input_path} to {output_path}")
-        self.progress.emit(5, "Starting extraction...")
-
-        # Check if output file already exists
-        if os.path.exists(output_path):
-            raise FileExistsError(f"Output file already exists: {output_path}")
-
-        # Create a CHDMan instance
-        chdman_instance = CHDMan()
-
-        # Perform the extraction
-        # Use the correct method for extraction (e.g., extract_cd, extract_hd, etc.)
-        # Explicitly type the worker to help mypy
-        worker: CHDManWorker = chdman_instance.extract_cd(
-            input_file=input_path,
-            output_file=output_path,
-        )
-        worker.signals.progress_updated.connect(self._progress_callback)
-
-    def _progress_callback(self, progress: float, status: str):
-        self.progress.emit(5 + int(progress * 0.9), status)
-
-    def pause(self):
-        """Pause the processing."""
-        logging.info(f"BatchWorker for {self.file_path} pausing.")
-        self._mutex.lock()
-        self._is_paused = True
-        self.progress.emit(0, "Paused")
-
-    def resume(self):
-        """Resume the processing."""
-        logging.info(f"BatchWorker for {self.file_path} resuming.")
-        self._is_paused = False
-        self._pause_cond.wakeAll()
-        self._mutex.unlock()
-        self.progress.emit(0, "Resumed")
-
-    def stop(self):
-        """Stop the processing."""
-        logging.info(f"BatchWorker for {self.file_path} stopping.")
+    def stop_processing(self):
         self._is_running = False
-        self._is_paused = False
-        self._pause_cond.wakeAll()
+        if self.chdman_worker_instance and hasattr(self.chdman_worker_instance, "stop"):
+            self.chdman_worker_instance.stop()
         self.progress.emit(0, "Stopping...")
 
 
 class BatchTab(QWidget):
-    """Batch processing tab for handling multiple files and archives."""
-
-    # Signals
     task_progress = Signal(int, str, int)
     task_error = Signal(str, int)
-    task_finished = Signal(bool, str, int)  # success, message, row
+    task_finished = Signal(bool, str, int)
 
     def __init__(self, parent: Optional[QWidget] = None, app_settings: Any = None):
-        # ...existing code...
-        self.log_text = None  # Will be initialized in setup_ui
-
-        """Initialize the BatchTab.
-
-        Args:
-            parent: The parent widget.
-        """
         super().__init__(parent)
         self.app_settings = app_settings
-        self.logger = (
-            get_logger(app_settings, module_name="BatchTab") if app_settings else None
+        # Fix for logger type
+        self.logger: Union[DebugLogger, logging.Logger, None] = (
+            get_logger(app_settings, module_name="BatchTab")
+            if app_settings
+            else logging.getLogger("BatchTab_fallback")
         )
 
-        # Initialize instance variables
         self.files: List[Dict[str, Any]] = []
-        self.output_dirs: Dict[str, str] = {}
         self.current_task_index = 0
         self.is_processing = False
         self.is_aborting = False
+        self.is_paused = False
         self.processed_files = 0
         self.failed_files = 0
         self.total_files = 0
-        self.temp_directories: List[Path] = []
+        self.temp_directories: List[str] = []
+        self.batch_id: str = f"batch_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
-        # Initialize the CHD manager (singleton)
-
-        self.chd_manager = CHDMan(app_settings=app_settings)
-
-        # Initialize the checkpoint manager
         self.checkpoint_manager = CheckpointManager()
-
-        # Initialize the archive manager
         self.archive_manager = ArchiveManager()
-
-        # Initialize the file scanner
         self.file_scanner = FileScanner()
 
-        # UI components that will be initialized in setup_ui
-        self.operation_combo = None
-        self.compression_combo = None
-        self.status_label = None
-        self.progress_bar = None
-        self.file_table = None
+        self.operation_combo: Optional[QComboBox] = None
+        self.compression_combo: Optional[QComboBox] = None
+        self.status_indicator: Optional[QLabel] = None
+        self.progress_bar: Optional[QProgressBar] = None
+        self.file_table: Optional[QTableWidget] = None
+        self.log_text: Optional[QTextEdit] = None
+        self.recent_files: List[str] = []
+        self.output_dir: str = str(Path.home() / "RetroClamp_Output")
+        self.compression_level: str = "zlib"  # Should match CHDCompressionType names
 
-        # Enable drag and drop
+        self.active_worker: Optional[BatchWorker] = None
+
+        # UI components that need to be initialized in setup_ui
+        self.add_files_btn: Optional[QPushButton] = None
+        self.add_dir_btn: Optional[QPushButton] = None
+        self.clear_btn: Optional[QPushButton] = None
+        self.start_btn: Optional[QPushButton] = None
+        self.pause_btn: Optional[QPushButton] = None
+        self.abort_btn: Optional[QPushButton] = None
+        self.resume_btn: Optional[QPushButton] = None
+        self.save_checkpoint_btn: Optional[QPushButton] = None
+        self.load_checkpoint_btn: Optional[QPushButton] = None
+        self.checkpoint_info: Optional[QTextEdit] = None
+
         self.setAcceptDrops(True)
-
-        # Set up the UI
-        self.setup_ui()
-        # Add Export/Copy Log buttons below log_text
-        from PySide6.QtWidgets import QHBoxLayout, QPushButton
-
-        log_btn_layout = QHBoxLayout()
-        self.export_log_btn = QPushButton("Export Log")
-        self.copy_log_btn = QPushButton("Copy Log")
-        log_btn_layout.addWidget(self.export_log_btn)
-        log_btn_layout.addWidget(self.copy_log_btn)
-        if hasattr(self, "log_text") and self.log_text:
-            self.layout().addLayout(log_btn_layout)
-        else:
-            # Fallback: try to add to main layout
-            self.layout().addLayout(log_btn_layout)
-        self.export_log_btn.clicked.connect(self.export_log)
-        self.copy_log_btn.clicked.connect(self.copy_log)
-
-        # Load settings
+        self.setup_ui()  # Initializes UI elements including self.status_indicator
         self.load_settings()
 
-        # Connect signals
         self.task_progress.connect(self.on_task_progress)
         self.task_error.connect(self.on_task_error)
         self.task_finished.connect(self.on_task_finished)
 
-        # Check for existing checkpoints (defer to after UI is fully initialized)
-        QTimer.singleShot(1000, self.check_for_existing_checkpoints)
-
-        # Load previous state if available
-        self.load_checkpoint()
+        QTimer.singleShot(500, self.check_for_existing_checkpoints)
 
     def load_settings(self):
-        """Load application settings from QSettings."""
-        from PySide6.QtCore import QSettings
+        settings = QSettings(SETTINGS_ORG, SETTINGS_BATCH)
+        geom = settings.value("geometry")
+        if isinstance(geom, QByteArray):
+            self.restoreGeometry(geom)
+        state = settings.value("windowState")
+        if isinstance(state, QByteArray):
+            self.restoreState(state)
+        recent = settings.value("recentFiles", [])
+        if isinstance(recent, list):
+            self.recent_files = [str(f) for f in recent if isinstance(f, str)]
+        out_dir_val = settings.value("outputDirectory", self.output_dir)
+        if isinstance(out_dir_val, str) and out_dir_val:
+            self.output_dir = out_dir_val
 
-        settings = QSettings("RetroClamp", "BatchProcessing")
-
-        # Load window geometry
-        geometry = settings.value("geometry")
-        if geometry is not None:
-            self.restoreGeometry(geometry)
-
-        # Load window state
-        window_state = settings.value("windowState")
-        if window_state is not None:
-            self.restoreState(window_state)
-
-        # Load recent files
-        recent_files = settings.value("recentFiles", [])
-        if recent_files:
-            self.recent_files = recent_files
-
-        # Load output directory
-        self.output_dir = settings.value("outputDirectory", "")
-
-        # Load compression settings
-        self.compression_level = settings.value("compressionLevel", "normal")
-
-        # Load UI state
-        if hasattr(self, "operation_combo") and self.operation_combo:
-            operation = settings.value("lastOperation", "compress")
-            index = self.operation_combo.findText(operation, Qt.MatchFixedString)
-            if index >= 0:
-                self.operation_combo.setCurrentIndex(index)
-
-        if hasattr(self, "compression_combo") and self.compression_combo:
-            compression = settings.value("compressionType", "zlib")
-            index = self.compression_combo.findText(compression, Qt.MatchFixedString)
-            if index >= 0:
-                self.compression_combo.setCurrentIndex(index)
-
-    def check_for_existing_checkpoints(self):
-        """Check for existing checkpoints and update UI accordingly."""
-        try:
-            # Get list of checkpoints
-            checkpoints = self.checkpoint_manager.list_checkpoints()
-
-            if not checkpoints:
-                # No checkpoints found, nothing to do
-                return
-
-            # Sort checkpoints by modification time (newest first)
-            checkpoints.sort(key=lambda x: x.get("modified", 0), reverse=True)
-            latest_checkpoint = checkpoints[0]
-
-            # Update the resume button
-            if hasattr(self, "resume_btn"):
-                self.resume_btn.setVisible(True)
-                timestamp = time.localtime(latest_checkpoint.get("modified"))
-                formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", timestamp)
-                self.resume_btn.setToolTip(
-                    f"Resume from checkpoint created on {formatted_time}"
-                )
-
-            # Show a status message in the UI
-            if hasattr(self, "status_label"):
-                self.status_label.setText(
-                    "Checkpoints available - click 'Resume from Last "
-                    "Checkpoint' to continue"
-                )
-
-            # Log the checkpoint info
-            logging.info(
-                f"Found {len(checkpoints)} checkpoint(s). Latest: "
-                f"{latest_checkpoint.get('filename')}"
-            )
-
-        except Exception as e:
-            logging.error(f"Error checking for checkpoints: {e}", exc_info=True)
+        if self.operation_combo:
+            op_name = settings.value("lastOperation", CHDTaskType.COMPRESS.name)
+            if isinstance(op_name, str):
+                for i in range(self.operation_combo.count()):
+                    item_data = self.operation_combo.itemData(i)
+                    if isinstance(item_data, CHDTaskType) and item_data.name == op_name:
+                        self.operation_combo.setCurrentIndex(i)
+                        break
+        if self.compression_combo:
+            comp_name = settings.value("lastCompression", CHDCompressionType.ZLIB.name)
+            if isinstance(comp_name, str):
+                for i in range(self.compression_combo.count()):
+                    item_data = self.compression_combo.itemData(i)
+                    if (
+                        isinstance(item_data, CHDCompressionType)
+                        and item_data.name == comp_name
+                    ):
+                        self.compression_combo.setCurrentIndex(i)
+                        break
 
     def save_settings(self):
-        """Save application settings to QSettings."""
-        from PySide6.QtCore import QSettings
-
-        settings = QSettings("RetroClamp", "BatchProcessing")
-
-        # Save window geometry and state
+        settings = QSettings(SETTINGS_ORG, SETTINGS_BATCH)
         settings.setValue("geometry", self.saveGeometry())
         settings.setValue("windowState", self.saveState())
-
-        # Save recent files
-        if hasattr(self, "recent_files") and self.recent_files:
+        if self.recent_files:
             settings.setValue("recentFiles", self.recent_files)
-
-        # Save output directory
-        if hasattr(self, "output_dir") and self.output_dir:
+        if self.output_dir:
             settings.setValue("outputDirectory", self.output_dir)
-
-        # Save compression settings
-        if hasattr(self, "compression_level"):
-            settings.setValue("compressionLevel", self.compression_level)
-
-        # Save UI state
-        if hasattr(self, "operation_combo") and self.operation_combo:
-            settings.setValue("lastOperation", self.operation_combo.currentText())
-
-        if hasattr(self, "compression_combo") and self.compression_combo:
-            settings.setValue("compressionType", self.compression_combo.currentText())
-
-        settings.sync()  # Ensure settings are written to disk
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        """Handle drag enter event to accept file/folder drops."""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event: QDragMoveEvent):
-        """Handle drag move event to provide visual feedback."""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event: QDropEvent):
-        """Handle drop event to process dropped files/folders."""
-        logging.info("Drop event received.")
-        if not event.mimeData().hasUrls():
-            logging.info("Drop event ignored: No URLs in mime data.")
-            return
-
-        # Get the list of URLs from the MIME data
-        urls = event.mimeData().urls()
-        if not urls:
-            logging.info("Drop event ignored: No URLs found.")
-            return
-
-        # Ask for output directory
-        output_dir = QFileDialog.getExistingDirectory(
-            self,
-            "Select Output Directory",
-            "",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
-        )
-
-        if not output_dir:  # User cancelled
-            logging.info("Output directory selection cancelled.")
-            return
-
-        logging.info(f"Selected output directory: {output_dir}")
-
-        # Process each dropped URL
-        for url in urls:
-            # Convert QUrl to local file path
-            file_path = url.toLocalFile()
-            if not file_path:
-                logging.warning(
-                    f"Could not convert URL to local file path: {url.toString()}"
-                )
-                continue
-
-            logging.info(f"Processing dropped item: {file_path}")
-            # Check if it's a directory
-            if os.path.isdir(file_path):
-                self._process_dropped_directory(file_path, output_dir)
-            else:
-                self._process_dropped_file(file_path, output_dir)
-
-    def _process_dropped_file(self, file_path: str, output_dir: str):
-        """Process a single dropped file."""
-        logging.info(f"Processing dropped file: {file_path}")
-        # Check file extension to determine how to handle it
-        ext = os.path.splitext(file_path)[1].lower()
-
-        # If it's an archive, add it to be processed
-        if ext in [".zip", ".7z", ".rar"]:
-            logging.info(f"Identified {file_path} as an archive.")
-            self._add_archive_to_queue(file_path, output_dir)
-        else:
-            # For regular files, just add them to the queue
-            logging.info(f"Identified {file_path} as a regular file.")
-            self._add_file_to_queue(file_path, output_dir)
-
-    def log_message(self, message, level="info"):
-        # HTML color and icon per level, now with timestamp
-        from datetime import datetime
-
-        icons = {
-            "info": "<span style='color:#7ec8e3;'>ℹ️</span>",
-            "warning": "<span style='color:#ffa500;'>⚠️</span>",
-            "error": "<span style='color:#ff4c4c;'>❌</span>",
-            "success": "<span style='color:#4caf50;'>✔️</span>",
-        }
-        colors = {
-            "info": "#c8c8c8",
-            "warning": "#ffa500",
-            "error": "#ff4c4c",
-            "success": "#4caf50",
-        }
-        icon = icons.get(level, "")
-        color = colors.get(level, "#c8c8c8")
-        timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-        html = f"<span style='color:{color};'>{timestamp} {icon} {message}</span>"
-        if self.log_text:
-            self.log_text.append(html)
-            self.log_text.verticalScrollBar().setValue(
-                self.log_text.verticalScrollBar().maximum()
+        if self.operation_combo and self.operation_combo.currentData():
+            settings.setValue("lastOperation", self.operation_combo.currentData().name)
+        if self.compression_combo and self.compression_combo.currentData():
+            settings.setValue(
+                "lastCompression", self.compression_combo.currentData().name
             )
-        import logging
-
-        if level == "error":
-            logging.error(message)
-        elif level == "warning":
-            logging.warning(message)
-        elif level == "success":
-            logging.info(f"SUCCESS: {message}")
-        else:
-            logging.info(message)
-
-    def export_log(self):
-        """Export the log contents to a file."""
-        from PySide6.QtWidgets import QFileDialog
-
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Log",
-            "retroclamp_batch_log.txt",
-            "Text Files (*.txt);;HTML Files (*.html)",
-        )
-        if filename:
-            content = (
-                self.log_text.toHtml()
-                if filename.endswith(".html")
-                else self.log_text.toPlainText()
-            )
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            self.log_message(f"Log exported to {filename}", level="success")
-
-    def copy_log(self):
-        """Copy the log contents to the clipboard."""
-        from PySide6.QtGui import QGuiApplication
-
-        clipboard = QGuiApplication.clipboard()
-        clipboard.setText(self.log_text.toPlainText())
-        self.log_message("Log copied to clipboard", level="success")
-
-    def _process_dropped_directory(self, dir_path: str, output_dir: str):
-        """Process a dropped directory by scanning for supported files."""
-        logging.info(f"Processing dropped directory: {dir_path}")
-
-        # Default to COMPRESS if operation_combo is not initialized
-        if not hasattr(self, "operation_combo") or not self.operation_combo:
-            operation = CHDTaskType.COMPRESS
-            logging.warning(
-                "operation_combo not initialized, defaulting to COMPRESS operation"
-            )
-        else:
-            operation = self.operation_combo.currentData()
-            logging.info(f"Current operation: {operation}")
-
-            # Fallback to COMPRESS if currentData returns None
-            if operation is None:
-                operation = CHDTaskType.COMPRESS
-                logging.warning("No operation selected, defaulting to COMPRESS")
-
-        # Define file extensions based on operation
-        if operation == CHDTaskType.COMPRESS:
-            image_exts = [".iso", ".bin", ".img", ".cue", ".gdi"]
-            archive_exts = [".zip", ".7z", ".rar"]
-            extensions = image_exts + archive_exts
-        else:  # Extraction
-            extensions = [".chd"]
-        self.log_message(
-            f"Scanning directory for supported files: {dir_path}", level="info"
-        )
-        self.log_message(f"Looking for extensions: {extensions}", level="info")
-
-        # Scan the directory for matching files
-        found_files = 0
-        from PySide6.QtCore import QThreadPool
-
-        from core.archive import ArchiveWorker
-
-        thread_pool = QThreadPool.globalInstance()
-        pending_extractions: List[Any] = []
-
-        def on_extraction_finished(temp_dir, file_path):
-            self.log_message(
-                f"Extracted archive to temp directory: {temp_dir}", level="success"
-            )
-
-            # Use FileScanner async scan for disk images in the extracted directory
-            scan_signals = self.file_scanner.find_disk_images_async(temp_dir)
-
-            def on_scan_progress(found, scanned, current):
-                self.log_message(
-                    f"Scanning extracted dir: {found} images found, "
-                    f"{scanned} files checked...",
-                    level="info",
-                )
-
-            def on_scan_error(msg):
-                self.log_message(
-                    f"Disk image scan error in {temp_dir}: {msg}", level="error"
-                )
-
-            def on_scan_finished(disk_images):
-                nonlocal found_files
-                if disk_images:
-                    for extracted_path in disk_images:
-                        self.log_message(
-                            "Found supported image in extracted archive: "
-                            f"{extracted_path}",
-                            level="success",
-                        )
-                        self._add_file_to_queue(extracted_path, output_dir)
-                        found_files += 1
-                else:
-                    self.log_message(
-                        f"No supported files found in extracted archive: {file_path}",
-                        level="warning",
-                    )
-                # Remove from pending extractions and check if all done
-                pending_extractions.remove(file_path)
-                if not pending_extractions and found_files == 0:
-                    self.log_message(
-                        f"No supported files found in dropped directory: {dir_path}",
-                        level="warning",
-                    )
-                    if hasattr(self, "update_status_indicator"):
-                        self.update_status_indicator(
-                            "No supported files found in the dropped folder(s)."
-                        )
-
-            scan_signals.progress.connect(on_scan_progress)
-            scan_signals.error.connect(on_scan_error)
-            scan_signals.finished.connect(on_scan_finished)
-
-        found_files = 0
-        for root, _, files in os.walk(dir_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                ext = os.path.splitext(file)[1].lower()
-                if operation == CHDTaskType.COMPRESS and ext in archive_exts:
-                    self.log_message(
-                        f"Found archive in directory: {file_path}", level="info"
-                    )
-                    # Extract archive asynchronously
-                    worker = ArchiveWorker(
-                        operation="extract", input_path=file_path, output_path=None
-                    )
-
-                    def make_on_finished(file_path):
-                        def handle(success, msg, temp_dir):
-                            if success:
-                                on_extraction_finished(temp_dir, file_path)
-                            else:
-                                self.log_message(
-                                    f"Extraction failed for {file_path}: {msg}",
-                                    level="error",
-                                )
-
-                        return handle
-
-                    worker.signals.finished.connect(make_on_finished(file_path))
-                    thread_pool.start(worker)
-                    pending_extractions.append(file_path)
-                elif any(file.lower().endswith(ext) for ext in extensions):
-                    self.log_message(
-                        f"Found supported file in directory: {file_path}",
-                        level="success",
-                    )
-                    self._add_file_to_queue(file_path, output_dir)
-                    found_files += 1
-        if not pending_extractions and found_files == 0:
-            self.log_message(
-                f"No supported files found in dropped directory: {dir_path}",
-                level="warning",
-            )
-            if hasattr(self, "update_status_indicator"):
-                self.update_status_indicator(
-                    "No supported files found in the dropped folder(s)."
-                )
-
-        if found_files == 0:
-            self.log_message(
-                f"No supported files found in dropped directory: {dir_path}",
-                level="warning",
-            )
-            if hasattr(self, "update_status_indicator"):
-                self.update_status_indicator(
-                    "No supported files found in the dropped folder(s)."
-                )
-
-    def _add_archive_to_queue(self, archive_path: str, output_dir: str):
-        """Add an archive file to the processing queue."""
-        logging.info(
-            f"Adding archive to queue: {archive_path} with output dir {output_dir}"
-        )
-        # Store the output directory for this archive
-        self.output_dirs[archive_path] = output_dir
-
-        # Add to the queue
-        self.files.append(archive_path)
-        self._update_file_table()
-
-        # Update status (migrated to styled log)
-        if hasattr(self, "status_label") and self.status_label:
-            self.status_label.setText(
-                f"Added {os.path.basename(archive_path)} to queue"
-            )
-        self.log_message(
-            f"Added {os.path.basename(archive_path)} to queue", level="success"
-        )
-
-    def _add_file_to_queue(self, file_path: str, output_dir: str):
-        """Add a regular file to the processing queue."""
-        logging.info(f"Adding file to queue: {file_path} with output dir {output_dir}")
-        # Skip if already in queue
-        if file_path in self.files:
-            logging.info(f"File already in queue, skipping: {file_path}")
-            return
-
-        # Store the output directory for this file
-        self.output_dirs[file_path] = output_dir
-
-        # Add to the queue
-        self.files.append(file_path)
-        self._update_file_table()
-
-        # Update status
-        self.status_label.setText(f"Added {os.path.basename(file_path)} to queue")
-
-    def _update_file_table(self):
-        if not self.file_table:
-            import logging
-
-            logging.warning("File table is not initialized. Skipping update.")
-            return
-        """Update the file table with the current list of files."""
-        if not hasattr(self, "file_table"):
-            return
-
-        self.file_table.setRowCount(len(self.files))
-
-        for row, file_path in enumerate(self.files):
-            # File name
-            name_item = QTableWidgetItem(os.path.basename(file_path))
-            name_item.setData(Qt.ItemDataRole.UserRole, file_path)
-            self.file_table.setItem(row, 0, name_item)
-
-            # File size
-            try:
-                size = os.path.getsize(file_path)
-                size_str = self._format_file_size(size)
-            except OSError:
-                size_str = "N/A"
-
-            size_item = QTableWidgetItem(size_str)
-            size_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-            )
-            self.file_table.setItem(row, 1, size_item)
-
-            # Output directory
-            output_dir = self.output_dirs.get(file_path, "")
-            dir_item = QTableWidgetItem(output_dir)
-            self.file_table.setItem(row, 2, dir_item)
-
-            # Status
-            status_item = QTableWidgetItem("Pending")
-            self.file_table.setItem(row, 3, status_item)
-
-    def _format_file_size(self, size_bytes: int) -> str:
-        """Format file size in a human-readable format."""
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes = int(size_bytes / 1024.0)
-        return f"{size_bytes:.1f} PB"
+        settings.sync()
 
     def setup_ui(self):
-        """Set up the user interface."""
-        # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
-        # ...existing UI setup code...
-        # Add a log widget for user feedback
-        from PySide6.QtWidgets import QTextEdit
-
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setStyleSheet(
-            "QTextEdit { "
-            "background: #181a20; "
-            "color: #c8c8c8; "
-            "font-family: Consolas, monospace; "
-            "font-size: 12px; }"
-        )
-        main_layout.addWidget(self.log_text)
-
-        # Set up drop zone style
-        self.setStyleSheet(
-            """
-            QWidget {
-                background-color: #2d2d2d;
-                color: #f0f0f0;
-            }
-            QWidget#dropZone {
-                border: 2px dashed #666666;
-                border-radius: 10px;
-                padding: 20px;
-                background-color: rgba(100, 100, 100, 0.2);
-            }
-            QWidget#dropZone:hover {
-                border-color: #4a9cff;
-                background-color: rgba(74, 156, 255, 0.1);
-            }
-            QLabel#dropLabel {
-                font-size: 16px;
-                color: #aaaaaa;
-                text-align: center;
-            }
-        """
-        )
-
-        # Operation selection
+        # ... (Operation and Compression groups setup as before) ...
         operation_group = QGroupBox("Operation")
-        operation_layout = QHBoxLayout()
-
+        op_layout = QHBoxLayout()
         self.operation_combo = QComboBox()
-        self.operation_combo.addItem("Compress to CHD", CHDTaskType.COMPRESS)
-        self.operation_combo.addItem("Extract CD from CHD", CHDTaskType.EXTRACT_CD)
-        self.operation_combo.addItem("Extract DVD from CHD", CHDTaskType.EXTRACT_DVD)
-        self.operation_combo.addItem(
-            "Extract Hard Disk from CHD", CHDTaskType.EXTRACT_HD
-        )
-        self.operation_combo.addItem(
-            "Extract Raw Data from CHD", CHDTaskType.EXTRACT_RAW
-        )
-        self.operation_combo.setCurrentIndex(0)  # Default to Compress
-
-        operation_layout.addWidget(QLabel("Operation:"))
-        operation_layout.addWidget(self.operation_combo)
-        operation_layout.addStretch()
-        operation_group.setLayout(operation_layout)
-
-        # Compression settings
-        compression_group = QGroupBox("Compression Settings")
-        compression_layout = QHBoxLayout()
-
-        self.compression_combo = QComboBox()
-        self.compression_combo.addItems(["zlib", "lzma", "flac", "huff", "avhu"])
-        self.compression_combo.setCurrentText("zlib")  # Default compression
-
-        compression_layout.addWidget(QLabel("Compression:"))
-        compression_layout.addWidget(self.compression_combo)
-        compression_layout.addStretch()
-        compression_group.setLayout(compression_layout)
-
-        # Add operation and compression groups to main layout
+        for task_type_enum in CHDTaskType:
+            self.operation_combo.addItem(
+                task_type_enum.name.replace("_", " ").title(), task_type_enum
+            )
+        self.operation_combo.setCurrentIndex(0)
+        op_layout.addWidget(QLabel("Operation:"))
+        op_layout.addWidget(self.operation_combo)
+        operation_group.setLayout(op_layout)
         main_layout.addWidget(operation_group)
+
+        compression_group = QGroupBox("Compression Settings (for Compress Operation)")
+        comp_layout = QHBoxLayout()
+        self.compression_combo = QComboBox()
+        for comp_type_enum in CHDCompressionType:
+            self.compression_combo.addItem(comp_type_enum.name, comp_type_enum)
+        zlib_index = self.compression_combo.findData(CHDCompressionType.ZLIB)
+        if zlib_index != -1:
+            self.compression_combo.setCurrentIndex(zlib_index)
+        comp_layout.addWidget(QLabel("Compression:"))
+        comp_layout.addWidget(self.compression_combo)
+        compression_group.setLayout(comp_layout)
         main_layout.addWidget(compression_group)
 
-        # Create drop zone widget
-        self.drop_zone = QWidget()
-        self.drop_zone.setObjectName("dropZone")
-        self.drop_zone.setMinimumHeight(100)
-
-        drop_layout = QVBoxLayout(self.drop_zone)
-        drop_layout.setContentsMargins(10, 10, 10, 10)
-
-        drop_label = QLabel("Drag and drop files or folders here")
-        drop_label.setObjectName("dropLabel")
-        drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        drop_layout.addStretch()
-        drop_layout.addWidget(drop_label)
-        drop_layout.addStretch()
-
-        # Add drop zone to main layout
-        main_layout.addWidget(self.drop_zone)
-
-        # Add checkpoint controls
-        checkpoint_group = QGroupBox("Batch Processing")
-        checkpoint_group.setStyleSheet(
-            """
-            QGroupBox {
-                border: 1px solid #44475a;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """
+        self.file_table = QTableWidget()
+        self.file_table.setColumnCount(4)
+        self.file_table.setHorizontalHeaderLabels(
+            ["File Name", "Size", "Output Directory", "Status"]
         )
+        self.file_table.setAlternatingRowColors(True)
+        self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.file_table.verticalHeader().setVisible(False)
+        self.file_table.horizontalHeader().setStretchLastSection(True)
+        self.file_table.setMinimumHeight(200)
+        main_layout.addWidget(self.file_table, 1)
 
-        checkpoint_layout = QVBoxLayout()
+        drop_info_label = QLabel("Drag & Drop Files/Folders Here, or Use Buttons")
+        drop_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_info_label.setObjectName(
+            "dropInfoLabel"
+        )  # Use object name for global CSS targeting
+        main_layout.addWidget(drop_info_label)
 
-        # Status indicator
-        self.status_indicator = QLabel()
+        file_management_layout = QHBoxLayout()
+        self.add_files_btn = QPushButton(
+            get_icon("file-plus", color="#bbeeff"), " Add Files..."
+        )
+        self.add_files_btn.clicked.connect(self.add_files_dialog)
+        self.add_dir_btn = QPushButton(
+            get_icon("folder-plus", color="#bbeeff"), " Add Folder..."
+        )
+        self.add_dir_btn.clicked.connect(self.add_directory_dialog)
+        self.clear_btn = QPushButton(get_icon("trash", color="#ffbbbb"), " Clear List")
+        self.clear_btn.clicked.connect(self.clear_file_list)
+        file_management_layout.addWidget(self.add_files_btn)
+        file_management_layout.addWidget(self.add_dir_btn)
+        file_management_layout.addStretch()
+        file_management_layout.addWidget(self.clear_btn)
+        main_layout.addLayout(file_management_layout)
+
+        processing_group = QGroupBox("Processing Controls")
+        pg_layout = QVBoxLayout()
+        self.status_indicator = QLabel("Status: Idle")  # Initialized here
         self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.update_status_indicator()
-
-        # Progress bar for current operation
+        pg_layout.addWidget(self.status_indicator)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")  # Fixed invalid format string
+        pg_layout.addWidget(self.progress_bar)
+        proc_buttons_layout = QHBoxLayout()
+        self.start_btn = QPushButton(get_icon("play", color="#bbffbb"), " Start Batch")
+        self.start_btn.clicked.connect(self.start_processing)
+        self.pause_btn = QPushButton(get_icon("pause", color="#ffffbb"), " Pause")
+        self.pause_btn.clicked.connect(self.toggle_pause_resume)
+        self.abort_btn = QPushButton(get_icon("stop-circle", color="#ffbbbb"), " Abort")
+        self.abort_btn.clicked.connect(self.abort_processing)
+        proc_buttons_layout.addWidget(self.start_btn)
+        proc_buttons_layout.addWidget(self.pause_btn)
+        proc_buttons_layout.addWidget(self.abort_btn)
+        pg_layout.addLayout(proc_buttons_layout)
+        processing_group.setLayout(pg_layout)
+        main_layout.addWidget(processing_group)
 
-        # Button layout
-        button_layout = QHBoxLayout()
-
-        # Resume button (initially hidden)
-        self.resume_btn = QPushButton("Resume from Last Checkpoint")
-        self.resume_btn.setIcon(load_svg_icon("player-play", 16, "#f8f8f2"))
-        self.resume_btn.setToolTip("Resume the last saved batch processing state")
+        checkpoint_group = QGroupBox("Checkpoint Management")
+        cg_layout = QVBoxLayout()
+        cp_buttons_layout = QHBoxLayout()
+        self.resume_btn = QPushButton(
+            get_icon("history", color="#bbeeff"), " Resume Last"
+        )
         self.resume_btn.clicked.connect(self.resume_from_last_checkpoint)
         self.resume_btn.setVisible(False)
-
-        # Save checkpoint button
-        self.save_checkpoint_btn = QPushButton("Save Checkpoint")
-        self.save_checkpoint_btn.setIcon(load_svg_icon("device-floppy", 16, "#f8f8f2"))
-        self.save_checkpoint_btn.setToolTip("Save the current batch processing state")
+        self.save_checkpoint_btn = QPushButton(
+            get_icon("save", color="#bbeeff"), " Save Checkpoint"
+        )
         self.save_checkpoint_btn.clicked.connect(self.save_checkpoint)
-
-        # Load checkpoint button
-        self.load_checkpoint_btn = QPushButton("Load Checkpoint...")
-        self.load_checkpoint_btn.setIcon(load_svg_icon("folder-open", 16, "#f8f8f2"))
-        self.load_checkpoint_btn.setToolTip(
-            "Load a previously saved batch processing state"
+        self.load_checkpoint_btn = QPushButton(
+            get_icon("upload-cloud", color="#bbeeff"), " Load Checkpoint"
         )
         self.load_checkpoint_btn.clicked.connect(self.load_checkpoint_dialog)
-
-        # Add buttons to layout
-        button_layout.addWidget(self.resume_btn)
-        button_layout.addWidget(self.save_checkpoint_btn)
-        button_layout.addWidget(self.load_checkpoint_btn)
-        button_layout.addStretch()
-
-        # Add widgets to checkpoint layout
-        checkpoint_layout.addWidget(self.status_indicator)
-        checkpoint_layout.addWidget(self.progress_bar)
-        checkpoint_layout.addLayout(button_layout)
-
-        # Checkpoint info panel (initially hidden)
+        cp_buttons_layout.addWidget(self.resume_btn)
+        cp_buttons_layout.addWidget(self.save_checkpoint_btn)
+        cp_buttons_layout.addWidget(self.load_checkpoint_btn)
+        cg_layout.addLayout(cp_buttons_layout)
         self.checkpoint_info = QTextEdit()
         self.checkpoint_info.setReadOnly(True)
-        self.checkpoint_info.setMaximumHeight(100)
+        self.checkpoint_info.setMaximumHeight(80)
         self.checkpoint_info.setVisible(False)
-        checkpoint_layout.addWidget(self.checkpoint_info)
-
-        checkpoint_group.setLayout(checkpoint_layout)
+        cg_layout.addWidget(self.checkpoint_info)
+        checkpoint_group.setLayout(cg_layout)
         main_layout.addWidget(checkpoint_group)
 
-        # Check for existing checkpoints
-        self.check_for_existing_checkpoints()
+        log_group = QGroupBox("Log")
+        log_layout = QVBoxLayout()
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMinimumHeight(100)
+        log_layout.addWidget(self.log_text, 1)
+        log_buttons_layout = QHBoxLayout()
+        export_log_btn = QPushButton(
+            get_icon("file-export", color="#bbeeff"), " Export Log"
+        )
+        export_log_btn.clicked.connect(self.export_log)
+        copy_log_btn = QPushButton(get_icon("copy", color="#bbeeff"), " Copy Log")
+        copy_log_btn.clicked.connect(self.copy_log)
+        log_buttons_layout.addStretch()
+        log_buttons_layout.addWidget(export_log_btn)
+        log_buttons_layout.addWidget(copy_log_btn)
+        log_layout.addLayout(log_buttons_layout)
+        log_group.setLayout(log_layout)
+        main_layout.addWidget(log_group, 1)
 
-        # Header
-        self.header_layout = QHBoxLayout()
-        self.header_layout.setContentsMargins(0, 0, 0, 10)
+        self.setLayout(main_layout)
+        self.update_ui_for_processing(False)
 
-        # ... (rest of the UI setup remains the same)
+    def _set_status_indicator_text(
+        self, status_key: Optional[str] = None, message: Optional[str] = None
+    ):
+        """Helper to set text on self.status_indicator QLabel."""
+        if not self.status_indicator:
+            return
 
-    def closeEvent(self, event):
-        """Handle window close event."""
-        # Save settings before closing
-        self.save_settings()
+        base_text = "Status: "
+        styled_text = "<span style='color:#f1fa8c'>Idle</span>"  # Default
 
-        # Save checkpoint before closing
+        if status_key == "processing":
+            styled_text = "<span style='color:#50fa7b'>Processing</span>"
+        elif status_key == "paused":
+            styled_text = "<span style='color:#ffb86c'>Paused</span>"
+        elif status_key == "error":
+            styled_text = "<span style='color:#ff5555'>Error</span>"
+        elif status_key == "completed":
+            styled_text = "<span style='color:#50fa7b'>Completed</span>"
+        elif status_key == "aborted":
+            styled_text = "<span style='color:#ffb86c'>Aborted</span>"
+
+        full_message = base_text + styled_text
+        if message:
+            full_message += f" - {message}"
+
+        self.status_indicator.setText(full_message)
+
+    def log_message(self, message: str, level: str = "info"):
+        if self.log_text:
+            icons = {"info": "ℹ️", "warning": "⚠️", "error": "❌", "success": "✔️"}
+            colors = {
+                "info": "#729fcf",
+                "warning": "#fce94f",
+                "error": "#ef2929",
+                "success": "#8ae234",
+            }
+            icon = icons.get(level, icons["info"])
+            color = colors.get(level, colors["info"])
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            html_message = (
+                f"<span style='color:{color};'>{timestamp} {icon} {message}</span>"
+            )
+            self.log_text.append(html_message)
+            sb = self.log_text.verticalScrollBar()
+            if sb:
+                sb.setValue(sb.maximum())
+
+        if self.logger:
+            log_method = getattr(self.logger, level, self.logger.info)
+            # Ensure 'message' is passed correctly based on logger type
+            if isinstance(self.logger, DebugLogger):
+                log_method(None, message)  # DebugLogger: (module_name, message)
+            elif isinstance(self.logger, logging.Logger):
+                log_method(message)  # type: ignore[call-arg]  # stdlib Logger: (message,)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event: QDragMoveEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        if not event.mimeData().hasUrls():
+            return
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        current_output_dir = self.output_dir or str(Path.home() / "RetroClamp_Output")
+        chosen_output_dir = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory for Dropped Items", current_output_dir
+        )
+        if not chosen_output_dir:
+            self.log_message("Drop cancelled: No output directory selected.", "warning")
+            return
+        self.output_dir = chosen_output_dir
+        for url in urls:
+            path_str = url.toLocalFile()
+            if Path(path_str).is_dir():
+                self._process_dropped_directory(path_str, chosen_output_dir)
+            elif Path(path_str).is_file():
+                self._process_dropped_file(path_str, chosen_output_dir)
+
+    def _add_file_to_queue(
+        self,
+        file_path: str,
+        output_dir_for_file: str,
+        is_archive: bool = False,
+        source_archive: Optional[str] = None,
+    ):
+        if any(f.get("path") == file_path for f in self.files):
+            self.log_message(
+                f"File '{Path(file_path).name}' already in queue. Skipping.", "warning"
+            )
+            return
+        try:
+            file_size = (
+                Path(file_path).stat().st_size if Path(file_path).exists() else 0
+            )
+        except OSError:
+            file_size = 0
+        status = "Pending (Archive)" if is_archive else "Pending"
+        if source_archive:
+            status += f" (from {Path(source_archive).name})"
+        file_data = {
+            "path": file_path,
+            "name": Path(file_path).name,
+            "size": file_size,
+            "status": status,
+            "output_dir": output_dir_for_file,
+            "is_archive": is_archive,
+            "source_archive": source_archive,
+        }
+        self.files.append(file_data)
+        self._update_file_table()
+        self.log_message(
+            f"Added '{file_data['name']}' to queue.",
+            "success" if not source_archive else "info",
+        )
+
+    def _process_dropped_file(self, file_path: str, output_dir_for_file: str):
+        ext = Path(file_path).suffix.lower()
+        is_archive = ext in [".zip", ".7z", ".rar"]
+        self._add_file_to_queue(file_path, output_dir_for_file, is_archive=is_archive)
+
+    def _process_dropped_directory(self, dir_path: str, base_output_dir: str):
+        self.log_message(f"Scanning directory: '{dir_path}'...", "info")
+        current_op: CHDTaskType = (
+            self.operation_combo.currentData()
+            if self.operation_combo
+            else CHDTaskType.COMPRESS
+        )
+        relevant_exts: List[str] = []
+        if current_op == CHDTaskType.COMPRESS:
+            relevant_exts = [
+                ".iso",
+                ".bin",
+                ".img",
+                ".cue",
+                ".gdi",
+                ".zip",
+                ".7z",
+                ".rar",
+            ]
+        elif current_op.name.startswith("EXTRACT"):
+            relevant_exts = [".chd"]
+        files_found_in_dir = 0
+        for root, _, filenames in os.walk(dir_path):
+            for filename in filenames:
+                file_path = str(Path(root) / filename)
+                if Path(file_path).suffix.lower() in relevant_exts:
+                    self._process_dropped_file(file_path, base_output_dir)
+                    files_found_in_dir += 1
+        if files_found_in_dir == 0:
+            self.log_message(
+                f"No relevant files ({', '.join(relevant_exts)}) found in directory '{dir_path}'.",
+                "warning",
+            )
+        else:
+            self.log_message(
+                f"Found and added {files_found_in_dir} relevant files from '{dir_path}'.",
+                "info",
+            )
+
+    def _update_file_table(self):
+        if not self.file_table:
+            return
+        self.file_table.setRowCount(0)  # Clear before repopulating
+        self.file_table.setRowCount(len(self.files))
+        for row, data in enumerate(self.files):
+            name_item = QTableWidgetItem(data.get("name", ""))
+            size_item = QTableWidgetItem(self._format_file_size(data.get("size", 0)))
+            output_dir_item = QTableWidgetItem(data.get("output_dir", ""))
+            status_item = QTableWidgetItem(data.get("status", ""))
+
+            self.file_table.setItem(row, 0, name_item)
+            self.file_table.setItem(row, 1, size_item)
+            self.file_table.setItem(row, 2, output_dir_item)
+            self.file_table.setItem(row, 3, status_item)  # Set item first
+            self._apply_status_coloring(
+                status_item, data.get("status", "")
+            )  # Then color
+
+        self.total_files = len(self.files)
+
+    def _apply_status_coloring(self, item: QTableWidgetItem, status_text: str):
+        if "completed" in status_text.lower() or "done" in status_text.lower():
+            item.setForeground(Qt.GlobalColor.darkGreen)
+        elif "failed" in status_text.lower() or "error" in status_text.lower():
+            item.setForeground(Qt.GlobalColor.red)
+        elif "pending" in status_text.lower() or "skipped" in status_text.lower():
+            item.setForeground(Qt.GlobalColor.darkYellow)
+        elif "processing" in status_text.lower() or "extracting" in status_text.lower():
+            item.setForeground(Qt.GlobalColor.blue)  # Or another color for active
+
+    def _format_file_size(self, size_bytes: int) -> str:
+        if size_bytes < 0:
+            return "N/A"
+        if size_bytes == 0:
+            return "0 B"
+        units = ["B", "KB", "MB", "GB", "TB", "PB"]
+        i = 0
+        size = float(size_bytes)
+        while size >= 1024.0 and i < len(units) - 1:
+            size /= 1024.0
+            i += 1
+        return f"{size:.1f} {units[i]}" if i > 0 else f"{int(size)} {units[i]}"
+
+    def start_processing(self):
+        if not self.files:
+            show_warning("No files to process.", parent=self)
+            return
+        if self.is_processing:
+            show_info("Processing already in progress.", parent=self)
+            return
+        for idx, file_data in enumerate(self.files):
+            f_path = Path(file_data["path"])
+            out_dir = Path(file_data["output_dir"])
+            if not f_path.exists():
+                show_error(f"Input file does not exist: {f_path}", parent=self)
+                self.files[idx]["status"] = "Error: Input missing"
+                self._update_file_table_row(idx)
+                return
+            try:
+                out_dir.mkdir(parents=True, exist_ok=True)
+                if not os.access(out_dir, os.W_OK):
+                    raise OSError("Output directory not writable.")
+            except OSError as e:
+                show_error(
+                    f"Output directory issue for '{f_path.name}': {out_dir}\n{e}",
+                    parent=self,
+                )
+                self.files[idx]["status"] = "Error: Output dir issue"
+                self._update_file_table_row(idx)
+                return
+        self.is_processing = True
+        self.is_aborting = False
+        self.is_paused = False
+        self.processed_files = 0
+        self.failed_files = 0
+        self.total_files = 0
+        self.current_task_index = 0
+        self.batch_id = f"batch_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        self.update_ui_for_processing(True)
+        self.log_message(
+            f"Starting batch (ID: {self.batch_id}) for {len(self.files)} items.", "info"
+        )
+        self.update_overall_progress()
+        QTimer.singleShot(0, self.process_next_task)
+
+    def process_next_task(self):
+        if self.is_aborting:
+            self.log_message("Processing aborted by user.", "warning")
+            self._finalize_processing(aborted=True)
+            return
+        if self.is_paused:
+            self.log_message("Processing is paused.", "info")
+            self._set_status_indicator_text("paused", "Paused by user.")
+            return
+        if self.current_task_index >= len(self.files):
+            self.log_message("All tasks completed or queue empty.", "info")
+            self._finalize_processing(aborted=False)
+            return
+
+        current_file_data = self.files[self.current_task_index]
+        self.log_message(
+            f"Item {self.current_task_index + 1}/{len(self.files)}: '{current_file_data['name']}'",
+            "info",
+        )
+        self._set_status_indicator_text(
+            "processing",
+            f"Item {self.current_task_index + 1}: {current_file_data['name']}",
+        )
+        if current_file_data.get("is_archive"):
+            self._handle_archive_item(current_file_data, self.current_task_index)
+        else:
+            self._start_worker_for_file(current_file_data, self.current_task_index)
+
+    def _start_worker_for_file(self, file_data: Dict[str, Any], row_idx: int):
+        if self.active_worker and self.active_worker.isRunning():
+            self.log_message("Error: An operation is already in progress.", "error")
+            return
+        op_type: CHDTaskType = (
+            self.operation_combo.currentData()
+            if self.operation_combo
+            else CHDTaskType.COMPRESS
+        )
+        comp_type: CHDCompressionType = (
+            self.compression_combo.currentData()
+            if self.compression_combo
+            else CHDCompressionType.ZLIB
+        )
+        worker_op_str = op_type.name.lower()
+        self.active_worker = BatchWorker(
+            file_path=file_data["path"],
+            output_dir=file_data["output_dir"],
+            operation=worker_op_str,
+            compression=comp_type,
+            verify=False,
+            parent=self,
+        )
+        self.active_worker.setProperty("task_row_index", row_idx)  # Store row_idx
+        self.active_worker.progress.connect(self._on_worker_progress)
+        self.active_worker.error.connect(self._on_worker_error)
+        self.active_worker.file_completed.connect(self._on_worker_file_completed)
+        self.active_worker.finished.connect(self._on_worker_thread_finished)
+        file_data["status"] = "Processing..."
+        self._update_file_table_row(row_idx)
+        self.active_worker.start()
+
+    def _handle_archive_item(self, archive_data: Dict[str, Any], row_idx: int):
+        archive_path = archive_data["path"]
+        archive_name = archive_data["name"]
+        output_for_contents = archive_data["output_dir"]
+        self.log_message(f"Handling archive: {archive_name}", "info")
+        archive_data["status"] = "Extracting archive..."
+        self._update_file_table_row(row_idx)
+        if not self.check_archive_compatibility(archive_path, row_idx):
+            msg = f"No compatible files for current op in '{archive_name}'."
+            self.log_message(msg, "warning")
+            self.task_finished.emit(True, msg, row_idx)
+            return  # Archive "processed" (skipped)
+
+        temp_dir_for_archive = tempfile.mkdtemp(
+            prefix=f"rc_batch_{Path(archive_name).stem}_"
+        )
+        self.temp_directories.append(temp_dir_for_archive)
+        extraction_worker = ArchiveWorker(
+            operation="extract",
+            input_path=archive_path,
+            output_path=temp_dir_for_archive,
+        )
+        # Fix: Use QObject.setProperty on QThread instance (ArchiveWorker)
+        extraction_worker.setProperty("original_archive_path", archive_path)  # type: ignore[attr-defined]
+        extraction_worker.setProperty("original_row_idx", row_idx)  # type: ignore[attr-defined]
+        extraction_worker.setProperty("output_for_contents", output_for_contents)  # type: ignore[attr-defined]
+        extraction_worker.signals.finished.connect(self._on_archive_extraction_finished)
+        extraction_worker.signals.error.connect(self._on_archive_extraction_error)
+        QThreadPool.globalInstance().start(extraction_worker)
+
+    def _on_archive_extraction_finished(
+        self, success: bool, message: str, temp_extract_path: Optional[str]
+    ):
+        sender_worker = self.sender()
+        if not isinstance(sender_worker, ArchiveWorker):
+            return
+        original_archive_path = sender_worker.property("original_archive_path")
+        row_idx = sender_worker.property("original_row_idx")
+        output_for_contents = sender_worker.property("output_for_contents")
+        if not success or not temp_extract_path:
+            err_msg = f"Failed to extract archive '{Path(original_archive_path).name}': {message}"
+            self.log_message(err_msg, "error")
+            self.task_finished.emit(False, err_msg, row_idx)
+            return
+        self.log_message(
+            f"Archive '{Path(original_archive_path).name}' extracted. Scanning...",
+            "info",
+        )
+        current_op: CHDTaskType = (
+            self.operation_combo.currentData()
+            if self.operation_combo
+            else CHDTaskType.COMPRESS
+        )
+        relevant_exts = (
+            [".iso", ".bin", ".img", ".cue", ".gdi"]
+            if current_op == CHDTaskType.COMPRESS
+            else ([".chd"] if current_op.name.startswith("EXTRACT") else [])
+        )
+        newly_added_files = 0
+        insert_point = row_idx + 1
+        for root, _, filenames_in_temp in os.walk(temp_extract_path):
+            for fname in filenames_in_temp:
+                extracted_f_path = str(Path(root) / fname)
+                if Path(extracted_f_path).suffix.lower() in relevant_exts:
+                    self._add_file_to_queue(
+                        extracted_f_path,
+                        output_for_contents,
+                        is_archive=False,
+                        source_archive=original_archive_path,
+                    )
+                    if len(self.files) > insert_point:
+                        self.files.insert(insert_point, self.files.pop())
+                    insert_point += 1
+                    newly_added_files += 1
+        if newly_added_files > 0:
+            self._update_file_table()
+            final_msg = f"Archive '{Path(original_archive_path).name}' processed. Added {newly_added_files} items."
+            self.task_finished.emit(True, final_msg, row_idx)
+        else:
+            final_msg = f"Archive '{Path(original_archive_path).name}' extracted, no relevant files found."
+            self.log_message(final_msg, "warning")
+            self.task_finished.emit(True, final_msg, row_idx)
+
+    def _on_archive_extraction_error(self, error_msg: str):
+        sender_worker = self.sender()
+        if not isinstance(sender_worker, ArchiveWorker):
+            return
+        original_archive_path = sender_worker.property("original_archive_path")
+        row_idx = sender_worker.property("original_row_idx")
+        full_err_msg = (
+            f"Error extracting '{Path(original_archive_path).name}': {error_msg}"
+        )
+        self.log_message(full_err_msg, "error")
+        self.task_finished.emit(False, full_err_msg, row_idx)
+
+    def _on_worker_progress(self, percent: int, status_msg: str):
+        sender = self.sender()
+        if sender:
+            row_idx = sender.property("task_row_index")
+            self.task_progress.emit(percent, status_msg, row_idx)
+
+    def _on_worker_error(self, error_msg: str, file_path_from_worker: str):
+        sender = self.sender()
+        if sender:
+            row_idx = sender.property("task_row_index")
+            self.task_error.emit(error_msg, row_idx)
+
+    def _on_worker_file_completed(self, file_path_completed: str, status_message: str):
+        sender = self.sender()
+        if sender:
+            row_idx = sender.property("task_row_index")
+            self.task_finished.emit(True, status_message, row_idx)
+
+    def _on_worker_thread_finished(self):
+        if self.active_worker:
+            self.active_worker.deleteLater()
+            self.active_worker = None
+
+    def _update_file_table_row(self, row_idx: int):
+        if not self.file_table or not (
+            0 <= row_idx < len(self.files) and row_idx < self.file_table.rowCount()
+        ):
+            return
+        data = self.files[row_idx]
+        # Ensure items exist before setting text. _update_file_table should create them.
+        item_name = self.file_table.item(row_idx, 0)
+        item_size = self.file_table.item(row_idx, 1)
+        item_out_dir = self.file_table.item(row_idx, 2)
+        item_status = self.file_table.item(row_idx, 3)
+
+        if item_name:
+            item_name.setText(data.get("name", ""))
+        if item_size:
+            item_size.setText(self._format_file_size(data.get("size", 0)))
+        if item_out_dir:
+            item_out_dir.setText(data.get("output_dir", ""))
+        if item_status:
+            status_text = data.get("status", "")
+            item_status.setText(status_text)
+            self._apply_status_coloring(item_status, status_text)
+
+    def on_task_progress(self, percent: int, message: str, row: int):
+        if self.progress_bar and 0 <= row < len(self.files):
+            self.progress_bar.setValue(percent)
+            self.progress_bar.setFormat(
+                f"{self.files[row]['name']}: {percent}% - {message}"
+            )
+        if 0 <= row < len(self.files):
+            self.files[row]["status"] = f"{message} ({percent}%)"
+            self._update_file_table_row(row)
+
+    def on_task_error(self, error_message: str, row: int):
+        if not (0 <= row < len(self.files)):
+            return
+        self.failed_files += 1
+        self.files[row]["status"] = f"Error: {error_message[:120]}"
+        self.log_message(
+            f"Error processing '{self.files[row]['name']}': {error_message}", "error"
+        )
+        self._update_file_table_row(row)
+        self.update_overall_progress()
+        self.current_task_index += 1
+        QTimer.singleShot(0, self.process_next_task)
+
+    def on_task_finished(self, success: bool, message: str, row: int):
+        if not (0 <= row < len(self.files)):
+            return
+        if success:
+            self.processed_files += 1
+            self.files[row]["status"] = f"Done: {message}"
+        else:
+            self.failed_files += 1
+            self.files[row]["status"] = f"Failed: {message}"
+        self.log_message(
+            f"Finished '{self.files[row]['name']}': {message} (Success: {success})",
+            "success" if success else "error",
+        )
+        self._update_file_table_row(row)
+        self.update_overall_progress()
+        self.current_task_index += 1
+        QTimer.singleShot(0, self.process_next_task)
+
+    def update_overall_progress(self):
+        if not self.progress_bar:
+            return
+        if self.total_files == 0:
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat("0/0 - 0%")
+            return
+        processed_count = self.processed_files + self.failed_files
+        percent_overall = (
+            int((processed_count / self.total_files) * 100)
+            if self.total_files > 0
+            else 0
+        )
+        self.progress_bar.setValue(percent_overall)
+        self.progress_bar.setFormat(
+            f"Overall: {processed_count}/{self.total_files} items - {percent_overall}%"
+        )
+        if not self.is_processing and processed_count == self.total_files:
+            self.progress_bar.setFormat(
+                f"Batch Complete: {processed_count}/{self.total_files} - {percent_overall}%"
+            )
+
+    def _finalize_processing(self, aborted: bool):
+        self.is_processing = False
+        self.is_aborting = False
+        self.is_paused = False
+        self.cleanup_temp_directories()
+        self.update_ui_for_processing(False)
+        completion_message = ""
+        status_key = "completed"
+        log_level = "success"
+        if aborted:
+            completion_message = (
+                f"Aborted. {self.processed_files} done, {self.failed_files} failed."
+            )
+            status_key = "aborted"
+            log_level = "warning"
+        else:
+            completion_message = f"Finished. {self.processed_files} done successfully."
+            if self.failed_files > 0:
+                completion_message += f" {self.failed_files} failed."
+                status_key = "error"
+                log_level = "warning"
+        self._set_status_indicator_text(status_key, completion_message)  # Use helper
+        self.log_message(completion_message, log_level)
+        self._show_completion_message_dialog(
+            completion_message, is_error=(self.failed_files > 0 or aborted)
+        )
         self.save_checkpoint()
 
-        # Clean up temporary directories
-        self.cleanup_temp_directories()
+    def _show_completion_message_dialog(self, message: str, is_error: bool = False):
+        title = "Processing Complete"
+        icon = QMessageBox.Icon.Information
+        if is_error:
+            title = "Processing Finished with Issues"
+            icon = QMessageBox.Icon.Warning
+        QMessageBox(icon, title, message, QMessageBox.StandardButton.Ok, self).exec()
 
-        # Accept the close event
-        event.accept()
+    def toggle_pause_resume(self):
+        if not self.is_processing:
+            self.log_message("No active process.", "info")
+            return
+        if self.is_aborting:
+            self.log_message("Cannot pause/resume during abort.", "warning")
+            return
+        self.is_paused = not self.is_paused
+        if self.is_paused:
+            if self.active_worker:
+                self.active_worker.pause_processing()
+            if self.pause_btn:
+                self.pause_btn.setText(" Resume")  # TODO: Update icon
+            self._set_status_indicator_text("paused", "Paused by user.")  # Use helper
+            self.log_message("Processing paused.", "info")
+        else:
+            if self.active_worker:
+                self.active_worker.resume_processing()
+            if self.pause_btn:
+                self.pause_btn.setText(" Pause")  # TODO: Update icon
+            self._set_status_indicator_text("processing", "Resuming...")  # Use helper
+            self.log_message("Processing resumed.", "info")
+            QTimer.singleShot(0, self.process_next_task)
 
-    def save_checkpoint(self):
-        """
-        Save the current batch processing state to a checkpoint file.
-        Uses CheckpointManager to save the state.
-        """
-        if not self.files:
-            show_info("No batch in progress to save.")
+    def abort_processing(self):
+        if not self.is_processing:
+            self.log_message("No active process to abort.", "info")
+            return
+        if self.is_aborting:
+            self.log_message("Abort already initiated.", "info")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Confirm Abort",
+            "Abort processing? Current item will try to finish.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+        self.is_aborting = True
+        if self.abort_btn:
+            self.abort_btn.setEnabled(False)
+        self.log_message("Abort requested. Current item completes.", "warning")
+        self._set_status_indicator_text("aborted", "Abort requested...")  # Use helper
+        if self.is_paused:
+            self.is_paused = False
+            if self.active_worker:
+                self.active_worker.resume_processing()
+            if self.pause_btn:
+                self.pause_btn.setEnabled(False)
+        if self.active_worker:
+            self.active_worker.stop_processing()
+        else:
+            self._finalize_processing(aborted=True)
+
+    def update_ui_for_processing(self, processing_active: bool):
+        self.is_processing = processing_active
+        if self.add_files_btn:
+            self.add_files_btn.setEnabled(not processing_active)
+        if self.add_dir_btn:
+            self.add_dir_btn.setEnabled(not processing_active)
+        if self.clear_btn:
+            self.clear_btn.setEnabled(not processing_active)
+        if self.operation_combo:
+            self.operation_combo.setEnabled(not processing_active)
+        if self.compression_combo:
+            self.compression_combo.setEnabled(not processing_active)
+        if self.load_checkpoint_btn:
+            self.load_checkpoint_btn.setEnabled(not processing_active)
+        if self.save_checkpoint_btn:
+            self.save_checkpoint_btn.setEnabled(True)
+        if self.start_btn:
+            self.start_btn.setEnabled(not processing_active)
+        if self.pause_btn:
+            self.pause_btn.setEnabled(processing_active and not self.is_aborting)
+        if self.abort_btn:
+            self.abort_btn.setEnabled(processing_active and not self.is_aborting)
+        if processing_active:
+            if self.start_btn:
+                self.start_btn.setText(" Processing...")
+            self._set_status_indicator_text("processing")  # Use helper
+        else:
+            if self.start_btn:
+                self.start_btn.setText(" Start Processing")
+            if self.pause_btn:
+                self.pause_btn.setText(" Pause")
+                self.is_paused = False
+            if self.abort_btn:
+                self.abort_btn.setText(" Abort")
+                self.is_aborting = False
+            # Final status set by _finalize_processing or other actions
+
+    def check_archive_compatibility(self, archive_path: str, row_idx: int) -> bool:
+        self.log_message(f"Checking compatibility: {Path(archive_path).name}", "info")
+        current_op: CHDTaskType = (
+            self.operation_combo.currentData()
+            if self.operation_combo
+            else CHDTaskType.COMPRESS
+        )
+        target_exts = (
+            [".iso", ".bin", ".img", ".cue", ".gdi"]
+            if current_op == CHDTaskType.COMPRESS
+            else ([".chd"] if current_op.name.startswith("EXTRACT") else [])
+        )
+        if not target_exts:
+            self.log_message(
+                f"No specific content check for op {current_op.name}.", "info"
+            )
+            return True
+        try:
+            if archive_path.lower().endswith(".zip"):
+                with zipfile.ZipFile(archive_path, "r") as zf:
+                    if any(
+                        any(f.lower().endswith(ext) for ext in target_exts)
+                        for f in zf.namelist()
+                    ):
+                        return True
+            elif archive_path.lower().endswith(".7z"):
+                with py7zr.SevenZipFile(archive_path, "r") as szf:
+                    if any(
+                        any(f.lower().endswith(ext) for ext in target_exts)
+                        for f in szf.getnames()
+                    ):
+                        return True
+            elif archive_path.lower().endswith(".rar"):
+                with rarfile.RarFile(archive_path, "r") as rf:
+                    if any(
+                        any(f.lower().endswith(ext) for ext in target_exts)
+                        for f in rf.namelist()
+                    ):
+                        return True
+            self.log_message(
+                f"No files matching {target_exts} in '{Path(archive_path).name}'.",
+                "warning",
+            )
+            return False
+        except Exception as e:
+            show_error(
+                f"Error checking archive '{Path(archive_path).name}': {e}",
+                title="Archive Error",
+                parent=self,
+            )
+            self.log_message(
+                f"Error checking archive compatibility for {Path(archive_path).name}: {e}",
+                "error",
+            )
+            if self.logger and isinstance(self.logger, DebugLogger):
+                self.logger.error(None, f"Archive check error for {archive_path}: {e}")
+            elif self.logger:  # Standard logger
+                self.logger.error(  # type: ignore[union-attr,call-arg]
+                    f"Archive check error for {archive_path}: {e}", exc_info=True
+                )
             return False
 
-        try:
-            # Prepare file status information
-            files_status = []
-            for i, file_path in enumerate(self.files):
-                status = "pending"
-                if i < self.current_task_index:
-                    status = "completed"
-                elif i == self.current_task_index and self.is_processing:
-                    status = "in_progress"
+    def cleanup_temp_directories(self, specific_dirs: Optional[List[str]] = None):
+        dirs_to_clean = (
+            specific_dirs if specific_dirs is not None else self.temp_directories
+        )
+        if not dirs_to_clean:
+            return
+        self.log_message(
+            f"Cleaning {len(dirs_to_clean)} temp director{'y' if len(dirs_to_clean) == 1 else 'ies'}...",
+            "info",
+        )
+        import shutil
 
-                files_status.append(
-                    {
-                        "path": file_path,
-                        "status": status,
-                        "output_dir": self.output_dirs.get(file_path, ""),
-                    }
+        for temp_dir_path in list(dirs_to_clean):
+            if not temp_dir_path or not Path(temp_dir_path).exists():
+                if temp_dir_path in self.temp_directories and specific_dirs is None:
+                    self.temp_directories.remove(temp_dir_path)
+                continue
+            try:
+                shutil.rmtree(temp_dir_path, ignore_errors=True)
+                self.log_message(f"Removed temp dir: {temp_dir_path}", "info")
+            except Exception as e:
+                self.log_message(
+                    f"Failed to remove temp dir {temp_dir_path}: {e}", "error"
                 )
+            finally:
+                if temp_dir_path in self.temp_directories and specific_dirs is None:
+                    self.temp_directories.remove(temp_dir_path)
+        if specific_dirs is None and not self.temp_directories:
+            self.log_message("All temp dirs cleaned.", "info")
+        elif specific_dirs is None and self.temp_directories:
+            self.log_message(
+                f"{len(self.temp_directories)} temp dirs remain.", "warning"
+            )
 
-            # Prepare metadata
+    def save_checkpoint(self):
+        if not self.files and not self.is_processing:
+            show_info("No batch data to save.", parent=self)
+            return False
+        try:
+            files_status = [
+                {
+                    "path": fd["path"],
+                    "name": fd["name"],
+                    "size": fd["size"],
+                    "status": fd["status"],
+                    "output_dir": fd["output_dir"],
+                    "is_archive": fd.get("is_archive", False),
+                    "source_archive": fd.get("source_archive"),
+                }
+                for fd in self.files
+            ]
+            op_data = (
+                self.operation_combo.currentData()
+                if self.operation_combo
+                else CHDTaskType.COMPRESS
+            )
+            comp_data = (
+                self.compression_combo.currentData()
+                if self.compression_combo
+                else CHDCompressionType.ZLIB
+            )
             metadata = {
-                "operation": self.operation_combo.currentData(),
-                "compression": (
-                    self.compression_combo.currentData()
-                    if hasattr(self, "compression_combo")
-                    else None
-                ),
+                "operation": op_data.name,
+                "compression": comp_data.name,
                 "processed_files": self.processed_files,
                 "failed_files": self.failed_files,
                 "is_processing": self.is_processing,
+                "is_paused": self.is_paused,
+                "current_task_index": self.current_task_index,
                 "timestamp": time.time(),
+                "output_dir_global": self.output_dir,
+                "total_files": len(self.files),
             }
-
-            # Create checkpoint
-            checkpoint_path = self.checkpoint_manager.create_checkpoint(
+            cp_path = self.checkpoint_manager.create_checkpoint(
                 batch_id=self.batch_id,
                 files=files_status,
                 current_index=self.current_task_index,
                 metadata=metadata,
             )
-
-            # Update UI
-            self.update_checkpoint_preview(checkpoint_path)
-            self.check_for_existing_checkpoints()
-
-            # Show notification
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setWindowTitle("Checkpoint Saved")
-            msg.setText("Batch processing checkpoint has been saved successfully.")
-            msg.setInformativeText(f"Checkpoint saved to:\n{checkpoint_path}")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-
-            return True
-
+            if cp_path:
+                self.log_message(f"Checkpoint saved: {Path(cp_path).name}", "success")
+                self.update_checkpoint_preview(cp_path)
+                self.check_for_existing_checkpoints()
+                return True
+            else:
+                self.log_message("Failed to save (no path returned).", "error")
+                return False
         except Exception as e:
-            show_error(f"Failed to save checkpoint: {str(e)}")
+            show_error(
+                f"Failed to save checkpoint: {e}", title="Save Error", parent=self
+            )
+            self.log_message(f"Error saving checkpoint: {e}", "error")
+            if (
+                self.logger
+            ):  # Log with exc_info if standard logger, else not for DebugLogger
+                if isinstance(self.logger, DebugLogger):
+                    self.logger.error(f"CP Save Error: {e}")
+                else:
+                    self.logger.error(f"CP Save Error: {e}", exc_info=True)
             return False
 
-    def load_checkpoint(self, checkpoint_file=None):
-        """Load batch processing state from a checkpoint file using CheckpointManager.
-
-        Args:
-            checkpoint_file: Path to the checkpoint file. If None, loads the
-                latest checkpoint.
-
-        Returns:
-            bool: True if checkpoint was loaded successfully, False otherwise.
-        """
+    def load_checkpoint(self, checkpoint_file_path: Optional[str] = None) -> bool:
+        if self.is_processing:
+            show_warning("Cannot load while processing.", parent=self)
+            return False
         try:
-            if checkpoint_file is None:
-                # Try to find the most recent checkpoint
-                checkpoints = self.checkpoint_manager.list_checkpoints()
-                if not checkpoints:
-                    if hasattr(self, "status_label") and self.status_label:
-                        self.status_label.setText("No checkpoints available.")
+            if checkpoint_file_path is None:
+                # Fix: Use get_latest_checkpoint instead of get_latest_checkpoint_info
+                latest_cp_file = (
+                    self.checkpoint_manager.get_latest_checkpoint()
+                )  # Returns path or None
+                if not latest_cp_file:
+                    show_info("No recent checkpoint.", parent=self)
                     return False
-                checkpoint_file = checkpoints[-1]  # Get most recent
-
-            # Load the checkpoint
-            checkpoint_data = self.checkpoint_manager.load_checkpoint(checkpoint_file)
-
-            if not checkpoint_data:
-                show_warning("No checkpoint data found or invalid checkpoint file.")
+                checkpoint_file_path = latest_cp_file
+            if not checkpoint_file_path or not Path(checkpoint_file_path).exists():
+                show_error(f"CP file not found: {checkpoint_file_path}", parent=self)
                 return False
-
-            # Restore the file list and other state
-            self.files = checkpoint_data.get("files", [])
-            self.output_dirs = checkpoint_data.get("output_dirs", {})
-            self.current_task_index = checkpoint_data.get("current_task_index", 0)
-
-            # Get metadata and update counters
-            metadata = checkpoint_data.get("metadata", {})
+            cp_data = self.checkpoint_manager.load_checkpoint(checkpoint_file_path)
+            if not cp_data:
+                show_error(
+                    f"Could not load data from {Path(checkpoint_file_path).name}",
+                    parent=self,
+                )
+                return False
+            self.files = cp_data.get("files", [])
+            self.current_task_index = cp_data.get("current_index", 0)
+            metadata = cp_data.get("metadata", {})
             self.processed_files = metadata.get("processed_files", 0)
             self.failed_files = metadata.get("failed_files", 0)
-            self.total_files = len(self.files)
-
-            # Update UI
+            self.total_files = metadata.get("total_files", len(self.files))
+            self.is_paused = metadata.get("is_paused", False)
+            self.output_dir = metadata.get("output_dir_global", self.output_dir)
+            self.batch_id = cp_data.get("batch_id", self.batch_id)
             self._update_file_table()
-            is_processing = metadata.get("is_processing", False)
-            self.update_ui_for_processing(is_processing)
-
-            # Restore combo box selections if they exist
-            if "operation" in metadata and hasattr(self, "operation_combo"):
-                # Try both findData and findText for compatibility
-                index = self.operation_combo.findData(metadata["operation"])
-                if index < 0:  # If not found in data, try text
-                    index = self.operation_combo.findText(metadata["operation"])
-                if index >= 0:
-                    self.operation_combo.setCurrentIndex(index)
-
-            if "compression" in metadata and hasattr(self, "compression_combo"):
-                # Try both findData and findText for compatibility
-                index = self.compression_combo.findData(metadata["compression"])
-                if index < 0:  # If not found in data, try text
-                    index = self.compression_combo.findText(metadata["compression"])
-                if index >= 0:
-                    self.compression_combo.setCurrentIndex(index)
-
-            show_info(
-                f"Checkpoint loaded successfully: {os.path.basename(checkpoint_file)}"
+            self.update_overall_progress()
+            self.restore_ui_state_from_metadata(metadata)
+            self.update_checkpoint_preview(checkpoint_file_path)
+            self.log_message(
+                f"CP '{Path(checkpoint_file_path).name}' loaded.", "success"
             )
+            was_processing = metadata.get("is_processing", False)
+            if was_processing and not self.is_paused:
+                reply = QMessageBox.question(
+                    self,
+                    "Resume?",
+                    "CP saved during active processing. Resume?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.is_processing = True
+                    self.update_ui_for_processing(True)
+                    QTimer.singleShot(0, self.process_next_task)
+            elif self.is_paused:
+                self.update_ui_for_processing(True)
+                self._set_status_indicator_text("paused", "Loaded paused state.")
+            else:
+                self.update_ui_for_processing(False)
             return True
-
         except Exception as e:
-            show_error(f"Failed to load checkpoint: {str(e)}")
+            show_error(f"Failed to load CP: {e}", title="Load Error", parent=self)
+            self.log_message(f"Error loading CP: {e}", "error")
+            if self.logger:
+                if isinstance(self.logger, DebugLogger):
+                    self.logger.error(None, f"CP Load Error: {e}")
+                else:
+                    self.logger.error(f"CP Load Error: {e}")  # type: ignore[union-attr]
             return False
 
-    # Removed duplicate abort_processing method
-    # Keeping the more complete implementation below
-
-    # Removed duplicate definition of check_for_existing_checkpoints
-    # to resolve lint warning.
-
-    def update_status_indicator(self, status=None):
-        """Update the status indicator with the current state."""
-        if status == "processing":
-            self.status_indicator.setText(
-                "Status: <span style='color:#50fa7b'>Processing</span>"
+    def restore_ui_state_from_metadata(self, metadata: Dict[str, Any]):
+        if self.operation_combo and "operation" in metadata:
+            op_name = metadata["operation"]
+            idx = self.operation_combo.findData(
+                CHDTaskType[op_name] if op_name in CHDTaskType.__members__ else -1
             )
-        elif status == "paused":
-            self.status_indicator.setText(
-                "Status: <span style='color:#ffb86c'>Paused</span>"
+            if idx != -1:
+                self.operation_combo.setCurrentIndex(idx)
+        if self.compression_combo and "compression" in metadata:
+            comp_name = metadata["compression"]
+            idx = self.compression_combo.findData(
+                CHDCompressionType[comp_name]
+                if comp_name in CHDCompressionType.__members__
+                else -1
             )
-        elif status == "error":
-            self.status_indicator.setText(
-                "Status: <span style='color:#ff5555'>Error</span>"
-            )
-        elif status == "completed":
-            self.status_indicator.setText(
-                "Status: <span style='color:#50fa7b'>Completed</span>"
-            )
-        else:
-            self.status_indicator.setText(
-                "Status: <span style='color:#f1fa8c'>Idle</span>"
-            )
+            if idx != -1:
+                self.compression_combo.setCurrentIndex(idx)
 
-    def update_checkpoint_preview(self, checkpoint_path):
-        """Update the checkpoint info panel with details about the checkpoint.
+    def check_for_existing_checkpoints(self):
+        # Fix: Use get_latest_checkpoint which returns path or None
+        latest_cp_path = self.checkpoint_manager.get_latest_checkpoint()
+        if latest_cp_path and self.resume_btn:
+            self.resume_btn.setVisible(True)
+            try:
+                mod_time = Path(latest_cp_path).stat().st_mtime
+            except OSError:
+                mod_time = 0
+            if mod_time:
+                self.resume_btn.setToolTip(
+                    f"Resume from CP of {time.strftime('%Y-%m-%d %H:%M', time.localtime(mod_time))}"
+                )
+            self.update_checkpoint_preview(latest_cp_path)
+            self.log_message(f"Latest CP found: {Path(latest_cp_path).name}", "info")
+        elif self.resume_btn:
+            self.resume_btn.setVisible(False)
+            if self.checkpoint_info:
+                self.checkpoint_info.setVisible(False)
 
-        Args:
-            checkpoint_path: Path to the checkpoint file to preview
-
-        Returns:
-            bool: True if the preview was updated successfully, False otherwise
-        """
+    def update_checkpoint_preview(self, checkpoint_file_path: str):
+        if not self.checkpoint_info:
+            return
         try:
-            if not hasattr(self, "checkpoint_manager") or not hasattr(
-                self, "checkpoint_info"
-            ):
-                return False
-
-            checkpoint = self.checkpoint_manager.load_checkpoint(checkpoint_path)
-            if not checkpoint:
-                self.checkpoint_info.setVisible(False)
-                return False
-
-            # Extract checkpoint information
-            files = checkpoint.get("files", [])
-            total_files = len(files)
-            completed = sum(1 for f in files if f.get("status") == "completed")
-            in_progress = sum(1 for f in files if f.get("status") == "in_progress")
-            pending = total_files - completed - in_progress
-
-            # Get current file being processed
-            current_file = next(
-                (f for f in files if f.get("status") == "in_progress"),
-                files[0] if files else {},
+            cp_data = self.checkpoint_manager.load_checkpoint(checkpoint_file_path)
+            if not cp_data:
+                self.checkpoint_info.setHtml("<p><i>Could not load preview.</i></p>")
+                self.checkpoint_info.setVisible(True)
+                return
+            metadata = cp_data.get("metadata", {})
+            files_in_cp = cp_data.get("files", [])
+            total = metadata.get("total_files", len(files_in_cp))
+            completed = metadata.get("processed_files", 0)
+            failed = metadata.get("failed_files", 0)
+            current_idx = metadata.get(
+                "current_task_index", cp_data.get("current_index", 0)
             )
-            current_file_name = os.path.basename(current_file.get("path", "N/A"))
-
-            # Format the preview text
-            preview = f"""
-            <html>
-            <body style='color:#f8f8f2;'>
-                <p><b>Checkpoint:</b> {os.path.basename(checkpoint_path)}</p>
-                <p><b>Created:</b> {time.ctime(os.path.getmtime(checkpoint_path))}</p>
-                <p><b>Progress:</b> {completed} completed, "
-                     "{in_progress} in progress, {pending} pending</p>
-                <p><b>Current File:</b> {current_file_name}</p>
-            </body>
-            </html>"""
-
-            self.checkpoint_info.setHtml(preview)
+            next_file = (
+                files_in_cp[current_idx]["name"]
+                if 0 <= current_idx < len(files_in_cp)
+                else "N/A"
+            )
+            created_t = metadata.get(
+                "timestamp",
+                (
+                    Path(checkpoint_file_path).stat().st_mtime
+                    if Path(checkpoint_file_path).exists()
+                    else 0
+                ),
+            )
+            preview_html = f"""<body style='font-size:9pt;'><b>File:</b> {Path(checkpoint_file_path).name}<br>
+                <b>Created:</b> {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_t))}<br>
+                <b>Progress:</b> {completed} done, {failed} failed of {total}.<br>
+                <b>Next ({current_idx + 1}):</b> {next_file}<br>
+                <b>Op:</b> {metadata.get("operation", "N/A")}, <b>Comp:</b> {metadata.get("compression", "N/A")}</body>"""
+            self.checkpoint_info.setHtml(preview_html)
             self.checkpoint_info.setVisible(True)
-            return True
-
         except Exception as e:
-            print(f"Error updating checkpoint preview: {e}")
-            if hasattr(self, "checkpoint_info"):
-                self.checkpoint_info.setVisible(False)
-            return False
+            self.checkpoint_info.setHtml(f"<p><i>Error loading preview: {e}</i></p>")
+            self.checkpoint_info.setVisible(True)
+            self.log_message(
+                f"Error updating CP preview for {checkpoint_file_path}: {e}", "error"
+            )
 
     def resume_from_last_checkpoint(self):
-        """Resume processing from the last saved checkpoint."""
-        if not hasattr(self, "checkpoint_manager"):
-            return
-
-        latest_checkpoint = self.checkpoint_manager.get_latest_checkpoint()
-        if latest_checkpoint:
-            self.load_checkpoint(latest_checkpoint)
+        self.load_checkpoint()
 
     def load_checkpoint_dialog(self):
-        """Show a dialog to load a checkpoint file with preview."""
-        # Create dialog
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Load Checkpoint")
-        dialog.setMinimumSize(600, 400)
-
-        layout = QVBoxLayout(dialog)
-
-        # File selection
-        file_layout = QHBoxLayout()
-        file_label = QLabel("Checkpoint File:")
-        file_edit = QLineEdit()
-        file_edit.setReadOnly(True)
-
-        def browse():
-            file_name, _ = QFileDialog.getOpenFileName(
-                dialog,
-                "Select Checkpoint File",
-                self.checkpoint_manager.checkpoint_dir,
-                "Checkpoint Files (*.json);;All Files (*)",
-            )
-            if file_name:
-                file_edit.setText(file_name)
-                self.update_checkpoint_preview(file_name)
-
-        browse_btn = QPushButton("Browse...")
-        browse_btn.clicked.connect(browse)
-
-        file_layout.addWidget(file_label)
-        file_layout.addWidget(file_edit, 1)
-        file_layout.addWidget(browse_btn)
-
-        # Preview area
-        preview_label = QLabel("Checkpoint Preview:")
-        preview_text = QTextEdit()
-        preview_text.setReadOnly(True)
-
-        # Buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load CP", self.checkpoint_manager.checkpoint_dir, "CP Files (*.json)"
         )
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-
-        # Add widgets to layout
-        layout.addLayout(file_layout)
-        layout.addWidget(preview_label)
-        layout.addWidget(preview_text, 1)
-        layout.addWidget(button_box)
-
-        # Restore metadata from the loaded checkpoint
-        if hasattr(self, "checkpoint_manager") and self.checkpoint_manager:
-            # Get the current checkpoint data
-            current_checkpoint = self.checkpoint_manager.current_checkpoint
-            if current_checkpoint and hasattr(current_checkpoint, "metadata"):
-                metadata = current_checkpoint.metadata
-                self.processed_files = metadata.get("processed_files", 0)
-                self.failed_files = metadata.get("failed_files", 0)
-                self.total_files = len(self.files)
-
-                # Update UI
-                self._update_file_table()
-                is_processing = metadata.get("is_processing", False)
-                self.update_ui_for_processing(is_processing)
-
-                # Restore combo box selections if they exist
-                # (Add any combo box restoration logic here if needed)
-
-    # Removed duplicate function definitions - keeping only one version of each function
-
-    def restore_ui_state_from_metadata(self, metadata):
-        """Restore UI state from metadata.
-
-        Args:
-            metadata (dict): Dictionary containing UI state
-        """
-        try:
-            if not metadata:
-                return
-
-            # Update UI based on metadata
-            if "is_processing" in metadata:
-                self.update_ui_for_processing(metadata["is_processing"])
-
-            # Restore combo box selections if they exist
-            if "operation" in metadata and hasattr(self, "operation_combo"):
-                # Try both findData and findText for compatibility
-                index = self.operation_combo.findData(metadata["operation"])
-                if index < 0:  # If not found in data, try text
-                    index = self.operation_combo.findText(metadata["operation"])
-                if index >= 0:
-                    self.operation_combo.setCurrentIndex(index)
-
-                if "compression" in metadata and hasattr(self, "compression_combo"):
-                    index = self.compression_combo.findData(metadata["compression"])
-                    if index >= 0:
-                        self.compression_combo.setCurrentIndex(index)
-
-                show_info("Checkpoint loaded successfully.")
-                return True
-
-        except Exception as e:
-            show_error(f"Failed to load checkpoint: {str(e)}")
-            return False
-
-    def update_ui_for_processing(self, is_processing):
-        """Update UI elements based on processing state."""
-        if not hasattr(self, "add_files_btn") or not hasattr(self, "operation_combo"):
-            return
-
-        # Update button states
-        self.add_files_btn.setEnabled(not is_processing)
-        if hasattr(self, "add_dir_btn"):
-            self.add_dir_btn.setEnabled(not is_processing)
-        if hasattr(self, "clear_btn"):
-            self.clear_btn.setEnabled(not is_processing)
-
-        self.start_btn.setEnabled(not is_processing)
-        self.operation_combo.setEnabled(not is_processing)
-
-        if hasattr(self, "compression_spin"):
-            self.compression_spin.setEnabled(not is_processing)
-        if hasattr(self, "verify_check"):
-            self.verify_check.setEnabled(not is_processing)
-
-        # Update button states based on processing state
-        if is_processing:
-            self.start_btn.setEnabled(False)
-            if hasattr(self, "pause_btn"):
-                self.pause_btn.setEnabled(True)
-            if hasattr(self, "abort_btn"):
-                self.abort_btn.setEnabled(True)
-        else:
-            self.start_btn.setEnabled(True)
-            if hasattr(self, "pause_btn"):
-                self.pause_btn.setEnabled(False)
-            if hasattr(self, "abort_btn"):
-                self.abort_btn.setEnabled(False)
-
-        # Update start button
-        if not is_processing:
-            self.start_btn.setText("Start Processing")
-            self.start_btn.setIcon(load_svg_icon("player-play", 16, "#f8f8f2"))
-
-            # Remove pause/resume button if exists
-            if hasattr(self, "pause_btn"):
-                self.pause_btn.setParent(None)
-                self.pause_btn.deleteLater()
-                delattr(self, "pause_btn")
-
-                # Remove abort button if exists
-                if hasattr(self, "abort_btn"):
-                    self.abort_btn.setParent(None)
-                    self.abort_btn.deleteLater()
-                    delattr(self, "abort_btn")
-
-            # Hide the busy indicator
-            if hasattr(self, "hide_busy_indicator"):
-                self.hide_busy_indicator()
-
-            # Reset state flags
-            if hasattr(self, "is_paused"):
-                self.is_paused = False
-            if hasattr(self, "is_aborting"):
-                self.is_aborting = False
-
-            # Update status
-            if hasattr(self, "status_label"):
-                if hasattr(self, "current_task_index") and hasattr(self, "tasks"):
-                    if self.current_task_index < len(self.tasks):
-                        status_text = (
-                            f"Batch processing aborted. "
-                            f"{self.current_task_index}/"
-                            f"{len(self.tasks)} files processed."
-                        )
-                        self.status_label.setText(status_text)
-                    else:
-                        status_text = (
-                            f"Batch processing completed. "
-                            f"{self.current_task_index}/"
-                            f"{len(self.tasks)} files processed."
-                        )
-                        self.status_label.setText(status_text)
-
-    def pause_processing(self):
-        """Pause the current processing."""
-        if not self.is_processing:
-            return
-
-        if self.chd_manager.is_paused():
-            # Resume processing
-            self.chd_manager.resume()
-            self.pause_button.setText("Pause")
-            self.status_label.setText("Processing resumed")
-        else:
-            # Pause processing
-            self.chd_manager.pause()
-            self.pause_button.setText("Resume")
-            self.status_label.setText("Processing paused")
-
-    def stop_processing(self):
-        """Stop the current processing."""
-        if not self.is_processing:
-            return
-
-        # Set abort flag
-        self.is_aborting = True
-
-        # Stop all tasks
-        self.chd_manager.stop()
-
-        # Update UI
-        self.finish_processing(aborted=True)
-        self.status_label.setText("Processing stopped by user")
-
-    def abort_processing(self):
-        """Gracefully abort processing after current task completes."""
-        if not hasattr(self, "is_aborting") or not hasattr(self, "abort_btn"):
-            return
-
-        if not self.is_aborting:
-            self.is_aborting = True
-            self.abort_btn.setEnabled(False)  # Prevent multiple clicks
-            self.abort_btn.setText("Aborting...")
-
-            # Update overlay to show aborting state
-            if hasattr(self, "show_busy_indicator"):
-                self.show_busy_indicator("aborting")
-
-            # If paused, resume to allow completion of current task
-            if hasattr(self, "is_paused") and self.is_paused:
-                self.is_paused = False
-                if hasattr(self, "pause_btn"):
-                    self.pause_btn.setText("Pause")
-                    self.pause_btn.setIcon(load_svg_icon("player-pause", 16, "#f8f8f2"))
-                    self.pause_btn.setEnabled(False)  # Disable pause during abort
-
-                # Process next task (which will check is_aborting)
-                if hasattr(self, "process_next_task"):
-                    self.process_next_task()
-
-    def toggle_pause_resume(self):
-        """Toggle between pause and resume states."""
-        if not hasattr(self, "is_paused") or not hasattr(self, "pause_btn"):
-            return
-
-        self.is_paused = not self.is_paused
-
-        if self.is_paused:
-            # Update button text and icon
-            self.pause_btn.setText("Resume")
-            self.pause_btn.setIcon(load_svg_icon("player-play", 16, "#f8f8f2"))
-
-            # Update status and overlay if attributes exist
-            if (
-                hasattr(self, "status_label")
-                and hasattr(self, "current_task_index")
-                and hasattr(self, "tasks")
-            ):
-                status_text = (
-                    f"Processing paused. {self.current_task_index}/"
-                    f"{len(self.tasks)} files processed."
-                )
-                self.status_label.setText(status_text)
-            if hasattr(self, "show_busy_indicator"):
-                self.show_busy_indicator("paused")
-        else:
-            # Update button text and icon
-            self.pause_btn.setText("Pause")
-            self.pause_btn.setIcon(load_svg_icon("player-pause", 16, "#f8f8f2"))
-
-            # Update status and overlay if attributes exist
-            if (
-                hasattr(self, "status_label")
-                and hasattr(self, "current_task_index")
-                and hasattr(self, "tasks")
-            ):
-                status_text = (
-                    f"Processing resumed. {self.current_task_index}/"
-                    f"{len(self.tasks)} files processed."
-                )
-                self.status_label.setText(status_text)
-            if hasattr(self, "hide_busy_indicator"):
-                self.hide_busy_indicator()
-
-            # Continue processing if not already processing
-            if (
-                not hasattr(self, "is_processing") or not self.is_processing
-            ) and hasattr(self, "process_next_task"):
-                self.process_next_task()
-
-    def log(self, row, message):
-        """Add a message to the status column for a specific row.
-
-        Args:
-            row: Table row index
-            message: Message to add
-        """
-        if not hasattr(self, "files_table") or not hasattr(self, "status_label"):
-            return
-
-        # Get the status item
-        status_item = self.files_table.item(row, 2)
-        if status_item is None:
-            return
-
-        # Add the message to the tooltip
-        current_tooltip = status_item.toolTip()
-        if current_tooltip:
-            new_tooltip = f"{current_tooltip}\n{message}"
-        else:
-            new_tooltip = message
-
-        status_item.setToolTip(new_tooltip)
-
-        # Update the status label with the message
-        self.status_label.setText(message)
-
-    def on_task_started(self, row: int, message: str):
-        """Handle task started event.
-
-        Args:
-            row: Table row index
-            message: Start message
-        """
-        if hasattr(self, "status_labels") and row < len(self.status_labels):
-            self.status_labels[row].setText(message)
-
-        # Reset progress bar
-        if hasattr(self, "progress_bars") and row < len(self.progress_bars):
-            self.progress_bars[row].setValue(0)
-            # Reset to default style
-            self.progress_bars[row].setStyleSheet("")
-
-    def on_task_progress(self, progress: int, message: str, row: int):
-        """Update progress for a specific task.
-
-        Args:
-            progress: Progress percentage (0-100)
-            message: Progress message
-            row: Table row index
-        """
-        # Update progress bar
-        if hasattr(self, "progress_bars") and row < len(self.progress_bars):
-            self.progress_bars[row].setValue(progress)
-
-        # Update status message
-        if hasattr(self, "status_labels") and row < len(self.status_labels):
-            self.status_labels[row].setText(message)
-
-        # Update overall progress
-        self.update_overall_progress()
-
-    def on_task_finished(self, success: bool, message: str, row: int):
-        """Handle task completion.
-
-        Args:
-            success: Whether the task completed successfully
-            message: Completion message
-            row: Table row index
-        """
-        # Update counters
-        if success:
-            self.processed_files += 1
-        else:
-            self.failed_files += 1
-
-        # Update status
-        if hasattr(self, "status_labels") and row < len(self.status_labels):
-            status = "Completed" if success else "Failed"
-            self.status_labels[row].setText(f"{status}: {message}")
-
-        # Update progress bar color based on success/failure
-        if hasattr(self, "progress_bars") and row < len(self.progress_bars):
-            style = ""
-            if success:
-                style = (
-                    "QProgressBar::chunk { "
-                    "background-color: #4CAF50; }"  # Green for success
-                )
-                self.progress_bars[row].setValue(100)  # Ensure it shows as complete
-            else:
-                style = (
-                    "QProgressBar::chunk { "
-                    "background-color: #F44336; }"  # Red for failure
-                )
-                self.progress_bars[row].setValue(100)  # Ensure it shows as complete
-            self.progress_bars[row].setStyleSheet(style)
-
-        # Update overall progress
-        self.update_overall_progress()
-
-        # Check if all tasks are done
-        if (self.processed_files + self.failed_files) >= len(self.files):
-            self.finish_processing()
-
-    def on_task_error(self, error_message: str, row: int):
-        """Handle task errors.
-
-        Args:
-            error_message: Error message
-            row: Table row index
-        """
-        # Update status
-        if hasattr(self, "status_labels") and row < len(self.status_labels):
-            self.status_labels[row].setText(f"Error: {error_message}")
-
-        # Update progress bar color to indicate error
-        if hasattr(self, "progress_bars") and row < len(self.progress_bars):
-            style = (
-                "QProgressBar::chunk { background-color: #F44336; }"  # Red for error
-            )
-            self.progress_bars[row].setStyleSheet(style)
-            self.progress_bars[row].setValue(100)  # Make sure it's visible
-
-        # Update counters
-        self.failed_files += 1
-
-        # Update overall progress
-        self.update_overall_progress()
-
-        # Check if all tasks are done
-        if (self.processed_files + self.failed_files) >= len(self.files):
-            self.finish_processing()
-
-    def check_archive_compatibility(self, archive_path: str, row: int) -> bool:
-        """Check if an archive contains compatible files.
-
-        Args:
-            archive_path: Path to the archive file
-            row: Table row index for logging
-
-        Returns:
-            bool: True if the archive contains compatible files, False otherwise
-        """
-        self.log(
-            row, f"Checking archive compatibility: {os.path.basename(archive_path)}"
+        if file_path:
+            self.load_checkpoint(file_path)
+
+    def add_files_dialog(self):
+        current_op: CHDTaskType = (
+            self.operation_combo.currentData()
+            if self.operation_combo
+            else CHDTaskType.COMPRESS
         )
-
-        # Determine the target file extension based on operation
-        operation = self.operation_combo.currentData()
-        if operation == CHDTaskType.COMPRESS:
-            # For compression, look for disk image files
-            target_extensions = [".iso", ".bin", ".img", ".cue", ".gdi", ".chd"]
-        else:
-            # For extraction, look for CHD files
-            target_extensions = [".chd"]
-
-        # Check archive contents
-        try:
-            if archive_path.lower().endswith(".zip"):
-                with zipfile.ZipFile(archive_path, "r") as zip_ref:
-                    for file in zip_ref.namelist():
-                        if any(file.lower().endswith(ext) for ext in target_extensions):
-                            return True
-
-            elif archive_path.lower().endswith(".7z"):
-                with py7zr.SevenZipFile(archive_path, "r") as zip_ref:
-                    for file in zip_ref.getnames():
-                        if any(file.lower().endswith(ext) for ext in target_extensions):
-                            return True
-
-            elif archive_path.lower().endswith(".rar"):
-                with rarfile.RarFile(archive_path, "r") as rar_ref:
-                    for file in rar_ref.namelist():
-                        if any(file.lower().endswith(ext) for ext in target_extensions):
-                            return True
-
-            self.log(row, "No compatible files found in archive")
-            return False
-
-        except Exception as e:
-            self.log(row, f"Error checking archive: {str(e)}")
-            return False
-
-    def extract_archive(self, archive_path, row):
-        """Extract an archive to a temporary directory.
-
-        Args:
-            archive_path: Path to the archive file
-            row: Table row index for logging
-
-        Returns:
-            str or None: Path to the temporary directory if created, None otherwise.
-        """
-        logging.info(f"Attempting to extract archive: {archive_path}")
-        self.log(row, f"Extracting archive: {os.path.basename(archive_path)}")
-
-        temp_dir = None
-        try:
-            # Create a temporary directory
-            temp_dir = tempfile.mkdtemp(prefix="retroclamp_")
-            self.temp_directories.append(temp_dir)
-            logging.info(f"Created temporary directory for extraction: {temp_dir}")
-
-            # Determine the target file extension based on operation
-            operation = self.operation_combo.currentData()
-            if operation == CHDTaskType.COMPRESS:
-                # For compression, look for disk image files
-                target_extensions = [".iso", ".bin", ".img", ".cue", ".gdi"]
-            else:
-                # For extraction, look for CHD files
-                target_extensions = [".chd"]
-            logging.info(f"Looking for extensions in archive: {target_extensions}")
-
-            # Extract the archive
-            self.archive_manager.extract_archive(
-                archive_path,
-                temp_dir,
-                progress_callback=lambda value, msg: self.on_task_progress(
-                    value, msg, row
-                ),
-                error_callback=lambda msg: self.on_task_error(msg, row),
-                finished_callback=lambda success, msg: self.on_task_finished(
-                    success, msg, row
-                ),
+        file_filter = (
+            "Disk Images & Archives (*.iso *.bin *.img *.cue *.gdi *.zip *.7z *.rar);;All (*.*)"
+            if current_op == CHDTaskType.COMPRESS
+            else (
+                "CHD (*.chd);;All (*.*)"
+                if current_op.name.startswith("EXTRACT")
+                else "All (*.*)"
             )
-
-            # Find files matching the target extension
-            # (This logic might be better in on_task_finished)
-            extracted_files = []
-            for root, _, files in os.walk(temp_dir):
-                for file in files:
-                    for ext in target_extensions:
-                        if file.lower().endswith(ext):
-                            extracted_files.append(os.path.join(root, file))
-
-            if extracted_files:
-                logging.info(
-                    f"Found {len(extracted_files)} compatible files "
-                    f"in archive in {os.path.basename(temp_dir)}"
-                )
-                self.log(
-                    row, f"Found {len(extracted_files)} compatible files in archive"
-                )
-
-            # The actual extraction is asynchronous via archive_manager,
-            # so we don't return here. The on_task_finished callback
-            # will handle the next steps. We return the temp_dir path
-            # if created successfully.
-            return temp_dir
-
-        except Exception as e:
-            error_msg = (
-                f"Error extracting archive {os.path.basename(archive_path)}: {e}"
+        )
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select Files", self.output_dir, file_filter
+        )
+        if files:
+            chosen_out_dir = QFileDialog.getExistingDirectory(
+                self, "Select Output Dir", self.output_dir
             )
-            logging.error(error_msg)
-            self.task_error.emit(error_msg, row)
-            # Clean up the temporary directory if extraction failed
-            if temp_dir and os.path.exists(temp_dir):
-                self.cleanup_temp_directories([temp_dir])
-            return None
-
-    def start_processing(self):
-        """Start processing all files in the batch."""
-        from pathlib import Path
-
-        from PySide6.QtWidgets import QMessageBox
-
-        if not hasattr(self, "files") or not self.files:
-            show_warning("No files to process")
-            return
-
-        # --- INPUT VALIDATION ---
-        for file_path in self.files:
-            file_obj = Path(file_path)
-            if not file_obj.exists():
-                QMessageBox.warning(
-                    self, "Invalid Input File", f"The file does not exist: {file_path}"
-                )
+            if not chosen_out_dir:
+                self.log_message("File add cancelled (no output dir).", "warning")
                 return
-            if not file_obj.is_file() and not self.archive_manager.is_archive(
-                file_path
-            ):
-                QMessageBox.warning(
-                    self,
-                    "Invalid Input File",
-                    f"The file is not a valid file or supported archive: {file_path}",
-                )
-                return
-            # Output directory for this file
-            output_dir = self.output_dirs.get(file_path, "")
-            if not output_dir:
-                QMessageBox.warning(
-                    self,
-                    "Invalid Output Directory",
-                    f"No output directory specified for file: {file_path}",
-                )
-                return
-            output_path = Path(output_dir)
-            if not output_path.exists() or not output_path.is_dir():
-                QMessageBox.warning(
-                    self,
-                    "Invalid Output Directory",
-                    f"The output directory does not exist: {output_dir}",
-                )
-                return
-            if not os.access(str(output_path), os.W_OK):
-                QMessageBox.warning(
-                    self,
-                    "Invalid Output Directory",
-                    f"The output directory is not writable: {output_dir}",
-                )
-                return
+            self.output_dir = chosen_out_dir
+            for f_path in files:
+                self._process_dropped_file(f_path, chosen_out_dir)
 
+    def add_directory_dialog(self):
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "Select Folder", self.output_dir
+        )
+        if dir_path:
+            chosen_out_dir = QFileDialog.getExistingDirectory(
+                self, "Select Output Dir", self.output_dir
+            )
+            if not chosen_out_dir:
+                self.log_message("Folder add cancelled (no output dir).", "warning")
+                return
+            self.output_dir = chosen_out_dir
+            self._process_dropped_directory(dir_path, chosen_out_dir)
+
+    def clear_file_list(self):
         if self.is_processing:
-            show_info("Processing is already in progress")
+            show_warning("Cannot clear while processing.", parent=self)
             return
+        if not self.files:
+            show_info("List already empty.", parent=self)
+            return
+        reply = QMessageBox.question(
+            self,
+            "Confirm Clear",
+            "Clear all items?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.files.clear()
+            self._update_file_table()
+            self.processed_files = 0
+            self.failed_files = 0
+            self.total_files = 0
+            self.current_task_index = 0
+            self.update_overall_progress()
+            self._set_status_indicator_text("idle", "List cleared.")
+            self.log_message("List cleared.", "info")
 
-        # Reset counters and state
-        self.processed_files = 0
-        self.failed_files = 0
-        self.current_task_index = 0
-        self.is_processing = True
-        self.is_aborting = False
-
-        # Clear any existing tasks
-        self.chd_manager.clear_tasks()
-
-        # Create a task for each file
-        for file_path in self.files:
-            output_dir = self.output_dirs.get(file_path, os.path.dirname(file_path))
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            output_path = os.path.join(
-                output_dir,
-                (
-                    base_name + ".chd"
-                    if self.operation_combo.currentData() == CHDTaskType.COMPRESS
-                    else ".bin"
-                ),
-            )
-
-            # Determine operation type
-            operation = self.operation_combo.currentData()
-
-            # Create task
-            task = CHDTask(
-                task_type=operation,
-                input_file=file_path,
-                output_file=output_path,
-                compression_level=self.compression_combo.currentText(),
-                force=True,
-                media_type=self._get_media_type(file_path),
-                user_data={"file_path": file_path, "output_dir": output_dir},
-            )
-
-            self.chd_manager.add_task(task)
-
-        # Update UI
-        self.update_ui_for_processing(True)
-        self.total_files = len(self.files)
-
-        # Execute all tasks
-        signals_list = self.chd_manager.execute_all_tasks()
-
-        # Connect signals for all tasks
-        for idx, signals in enumerate(signals_list):
-            signals.started.connect(lambda msg, i=idx: self.on_task_started(i, msg))
-            signals.progress.connect(
-                lambda val, msg, i=idx: self.on_task_progress(val, msg, i)
-            )
-            signals.finished.connect(
-                lambda success, msg, i=idx: self.on_task_finished(success, msg, i)
-            )
-            signals.error.connect(lambda msg, i=idx: self.on_task_error(msg, i))
-
-    def cleanup_temp_directories(self, temp_dirs=None):
-        """Clean up temporary directories created during processing.
-
-        Args:
-            temp_dirs: List of temporary directories to clean up.
-                If None, uses self.temp_directories
-        """
-        if temp_dirs is None:
-            if not hasattr(self, "temp_directories") or not self.temp_directories:
-                return
-            temp_dirs = self.temp_directories[:]
-
-        logging.info("Cleaning up temporary directories...")
-
-        for temp_dir in temp_dirs[:]:  # Iterate over a copy of the list
+    def export_log(self):
+        if not self.log_text or not self.log_text.toPlainText():
+            show_info("Log empty.", parent=self)
+            return
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Log", "BatchLog.html", "HTML (*.html);;Text (*.txt)"
+        )
+        if save_path:
             try:
-                if os.path.exists(temp_dir):
-                    # First, try to remove files with read-only attributes
-                    for root, dirs, files in os.walk(temp_dir, topdown=False):
-                        for name in files:
-                            file_path = os.path.join(root, name)
-                            try:
-                                # Set owner-only permissions (security)
-                                os.chmod(file_path, 0o600)
-                                os.unlink(file_path)
-                            except Exception as e:
-                                logging.warning(
-                                    f"Could not remove file {file_path}: {e}"
-                                )
-
-                        # Remove directories
-                        for name in dirs:
-                            dir_path = os.path.join(root, name)
-                            try:
-                                # Set owner-only permissions (security)
-                                os.chmod(dir_path, 0o700)
-                                os.rmdir(dir_path)
-                            except Exception as e:
-                                logging.warning(
-                                    f"Could not remove directory {dir_path}: {e}"
-                                )
-
-                    # Finally, remove the top-level directory
-                    try:
-                        # Set owner-only permissions (security)
-                        os.chmod(temp_dir, 0o700)
-                        os.rmdir(temp_dir)
-                        logging.info(
-                            f"Successfully removed temporary directory: {temp_dir}"
-                        )
-                    except Exception as e:
-                        logging.error(
-                            f"Failed to remove temporary directory {temp_dir}: {e}"
-                        )
-
-                # Remove from the list whether successful or not
-                if temp_dir in self.temp_directories:
-                    self.temp_directories.remove(temp_dir)
-
+                content = (
+                    self.log_text.toHtml()
+                    if save_path.endswith(".html")
+                    else self.log_text.toPlainText()
+                )
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                self.log_message(f"Log exported to {save_path}", "success")
             except Exception as e:
-                logging.error(f"Error cleaning up temporary directory {temp_dir}: {e}")
+                show_error(f"Failed to export: {e}", title="Export Error", parent=self)
+                self.log_message(f"Error exporting: {e}", "error")
 
-        logging.info("Temporary directory cleanup completed")
-
-    def _get_media_type(self, file_path: str) -> str:
-        """Determine the media type based on file extension."""
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in [".cue", ".iso", ".bin"]:
-            return "CD"
-        elif ext in [".chd"]:
-            # For extraction, we need to check the CHD type
-            # This is a simplified version - you might want to enhance this
-            return "CD"  # Default to CD
-        return "Hard Disk"  # Defaults
-
-    def process_next_task(self):
-        """Process the next task in the queue."""
-        if self.current_task_index < len(self.files):
-            file_path = self.files[self.current_task_index]
-            file_name = os.path.basename(file_path)
-
-            # Update status
-            current = self.current_task_index + 1
-            status_text = f"Processing {current} of {self.total_files}: {file_name}"
-            self.status_label.setText(status_text)
-
-            # Check if file is an archive
-            if any(file_name.lower().endswith(ext) for ext in [".zip", ".7z", ".rar"]):
-                # Handle archive file
-                self.process_archive_file(file_path)
-            else:
-                # Handle regular file
-                self.process_regular_file(file_path)
+    def copy_log(self):
+        if not self.log_text or not self.log_text.toPlainText():
+            show_info("Log empty.", parent=self)
+            return
+        cb = QGuiApplication.clipboard()
+        if cb:
+            cb.setText(self.log_text.toPlainText())
+            self.log_message("Log copied.", "success")
         else:
-            # All tasks completed
-            self.all_tasks_completed()
+            show_error("No clipboard.", parent=self)
 
-    def process_archive_file(self, file_path):
-        """Process an archive file by extracting and queueing its contents."""
-        row = self.current_task_index
-        file_name = os.path.basename(file_path)
-
-        # Check if archive contains compatible files
-        if not self.check_archive_compatibility(file_path, row):
-            self.log(row, f"Skipping archive (no compatible files): {file_name}")
-            self.task_completed(
-                success=False, message=f"No compatible files in {file_name}"
+    def closeEvent(self, event: QCloseEvent):  # Fix: QCloseEvent
+        if self.is_processing:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Exit",
+                "Processing active. Exit anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            return
-
-        # Extract the archive
-        success, temp_dir, extracted_files = self.extract_archive(file_path, row)
-
-        if success and extracted_files:
-            # Add extracted files to the processing queue
-            for extracted_file in extracted_files:
-                self.files.insert(self.current_task_index + 1, extracted_file)
-
-            # Update total files count
-            self.total_files = len(self.files)
-
-            # Process the first extracted file next
-            self.current_task_index += 1
-            self.process_next_task()
-
-    def process_regular_file(self, file_path: str):
-        """Process a regular file (non-archive) using CHDMAN.
-
-        Args:
-            file_path: Path to the file to process
-        """
-        row = self.current_task_index
-        file_name = os.path.basename(file_path)
-
-        try:
-            # Get output directory for this file (or use default)
-            output_dir = self.output_dirs.get(file_path, os.path.dirname(file_path))
-
-            # Get operation type from UI
-            operation = self.operation_combo.currentText().lower()
-
-            # Get compression settings from UI
-            compression = "zlib"  # Default compression
-            if hasattr(self, "compression_combo"):
-                compression = self.compression_combo.currentText().lower()
-
-            # Get verify setting from UI
-            verify = False
-            if hasattr(self, "verify_check") and self.verify_check.isChecked():
-                verify = True
-
-            # Ensure compression is a CHDCompressionType enum member
-            if isinstance(compression, str):
-                try:
-                    compression_to_pass = CHDCompressionType[compression.upper()]
-                except KeyError as err:
-                    raise ValueError(
-                        f"Invalid compression type: {compression}"
-                    ) from err
-            elif isinstance(compression, CHDCompressionType):
-                compression_to_pass = compression
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
             else:
-                raise TypeError(f"Unexpected type for compression: {type(compression)}")
-
-            # Create and configure worker
-            self.worker = BatchWorker(
-                file_path=file_path,
-                output_dir=output_dir,
-                operation=operation,
-                compression=compression_to_pass,
-                verify=verify,
-                parent=self,
-            )
-
-            # Connect worker signals
-            self.worker.progress.connect(
-                lambda p, msg, r=row: self.on_task_progress(p, msg, r)
-            )
-            self.worker.error.connect(lambda msg, r=row: self.on_task_error(msg, r))
-            self.worker.finished.connect(lambda: self._on_worker_finished(row))
-            self.worker.file_completed.connect(
-                lambda path, msg, r=row: self._on_file_completed(path, msg, r)
-            )
-
-            # Store worker reference
-            if not hasattr(self, "workers"):
-                self.workers = {}
-            self.workers[row] = self.worker
-
-            # Update UI
-            self.log(row, f"Starting {operation} for {file_name}")
-            self.task_progress.emit(0, f"Starting {operation}...", row)
-
-            # Start processing
-            self.worker.start()
-
-        except Exception as e:
-            error_msg = f"Failed to start processing: {str(e)}"
-            self.task_error.emit(error_msg, row)
-            self.task_progress.emit(0, error_msg, row)
-
-    def _on_worker_finished(self, row: int):
-        """Handle worker completion.
-
-        Args:
-            row: Row index in the files table
-        """
-        # Clean up worker reference
-        if hasattr(self, "workers") and row in self.workers:
-            self.workers[row].deleteLater()
-            del self.workers[row]
-
-    def _on_file_completed(self, file_path: str, message: str, row: int):
-        """Handle file completion.
-
-        Args:
-            file_path: Path to the processed file
-            message: Completion message
-            row: Row index in the files table
-        """
-        self.task_finished.emit(True, message, row)
-        self.task_progress.emit(100, message, row)
-
-    def all_tasks_completed(self):
-        """Called when all tasks have been processed."""
-        try:
-            self.is_processing = False
-            self.is_aborting = False
-
-            # Save checkpoint before cleaning up
+                self.is_aborting = True
+            if self.active_worker:
+                self.active_worker.stop_processing()
+        self.save_settings()
+        if self.files:
             self.save_checkpoint()
-
-            # Clean up any temporary directories
-            self.cleanup_temp_directories()
-
-            # Disconnect all signals from CHDManager
-            try:
-                signals_list = self.chd_manager.get_task_signals()
-                for signals in signals_list:
-                    try:
-                        if signals:
-                            signals.started.disconnect()
-                            signals.progress.disconnect()
-                            signals.finished.disconnect()
-                            signals.error.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass  # Already disconnected or never connected
-            except AttributeError:
-                pass  # CHDManager doesn't have get_task_signals method
-
-            # Update UI on the main thread
-            QTimer.singleShot(0, self._update_ui_after_completion)
-
-        except Exception as e:
-            logging.error(f"Error in all_tasks_completed: {e}", exc_info=True)
-            self._show_completion_message(
-                f"Error completing tasks: {str(e)}", is_error=True
-            )
-
-    def _update_ui_after_completion(self):
-        """Update UI after all tasks have completed."""
-        try:
-            # Update UI
-            self.update_ui_for_processing(False)
-
-            # Show completion message
-            message = (
-                f"Processing complete. "
-                f"{self.processed_files} files processed successfully."
-            )
-            if self.failed_files > 0:
-                message += f" {self.failed_files} files failed."
-
-            self.status_label.setText(message)
-            self._show_completion_message(message, is_error=self.failed_files > 0)
-
-            # Clear any selection in the table
-            if hasattr(self, "files_table"):
-                self.files_table.clearSelection()
-
-            # Save final checkpoint
-            self.save_checkpoint()
-
-        except Exception as e:
-            logging.error(f"Error updating UI after completion: {e}", exc_info=True)
-
-    def _show_completion_message(self, message, is_error=False):
-        """Show completion message with appropriate styling."""
-        try:
-            if is_error:
-                QMessageBox.critical(self, "Processing Completed with Errors", message)
-            else:
-                QMessageBox.information(self, "Processing Complete", message)
-        except Exception as e:
-            logging.error(f"Error showing completion message: {e}", exc_info=True)
-
-    def task_completed(self, success=True, message=None):
-        """Handle completion of a single task.
-
-        Args:
-            success: Whether the task completed successfully
-            message: Optional completion message
-        """
-        try:
-            if success:
-                self.processed_files += 1
-                if message:
-                    logging.info(f"Task completed: {message}")
-            else:
-                self.failed_files += 1
-                if message:
-                    logging.error(f"Task failed: {message}")
-
-            # Update progress
-            total = len(self.files) if hasattr(self, "files") else 1
-            if total > 0:
-                processed_count = self.processed_files + self.failed_files
-                progress = int((processed_count / total) * 100)
-            else:
-                progress = 0
-
-            # Update progress bar on the main thread
-            if hasattr(self, "progress_bar"):
-                self.progress_bar.setValue(progress)
-
-            # Update status label
-            processed = self.processed_files
-            failed = self.failed_files
-            status_message = (
-                f"Processed: {processed} | Failed: {failed} | Total: {total}"
-            )
-            if hasattr(self, "status_label"):
-                self.status_label.setText(status_message)
-
-            # Save checkpoint after each task
-            try:
-                self.save_checkpoint()
-            except Exception as e:
-                logging.error(f"Error saving checkpoint: {e}", exc_info=True)
-
-            # Process next task or finish
-            if (
-                not self.is_aborting
-                and hasattr(self, "files")
-                and (self.processed_files + self.failed_files) < len(self.files)
-            ):
-                QTimer.singleShot(0, self.process_next_task)
-            else:
-                QTimer.singleShot(0, self.all_tasks_completed)
-
-        except Exception as e:
-            logging.error(f"Error in task_completed: {e}", exc_info=True)
-            # Try to continue with next task
-            if (
-                not self.is_aborting
-                and hasattr(self, "files")
-                and (self.processed_files + self.failed_files) < len(self.files)
-            ):
-                QTimer.singleShot(0, self.process_next_task)
-            else:
-                QTimer.singleShot(0, self.all_tasks_completed)
-
-    # Removed duplicate task-related function definitions
-    # Keeping only one version of each function
-
-    def browse(self):
-        """Open a file dialog to select files for processing."""
-        file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        file_dialog.setNameFilter("All Files (*)")
-
-        if file_dialog.exec():
-            selected_files = file_dialog.selectedFiles()
-            if selected_files:
-                self.add_files(selected_files)
+        self.cleanup_temp_directories()
+        event.accept()

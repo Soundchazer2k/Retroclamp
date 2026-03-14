@@ -23,7 +23,7 @@ from core.debug_logger import DebugLogger
 try:
     import py7zr
 except ImportError:
-    py7zr = None
+    py7zr = None  # type: ignore[assignment]
 
 # Improved libarchive import handling - handle both ImportError and any runtime
 # errors that might occur when the native library isn't available
@@ -718,7 +718,7 @@ class ArchiveManager(QObject):
         password: Optional[str] = None,
     ):
         """Starts an archive extraction operation."""
-        if self.current_worker and self.current_worker.isRunning():
+        if self.current_worker and self.thread_pool.activeThreadCount() > 0:
             if self.debug_logger:
                 log_message = (
                     "Another archive operation is already running. "
@@ -752,7 +752,7 @@ class ArchiveManager(QObject):
         password: Optional[str] = None,
     ):
         """Starts an archive compression operation."""
-        if self.current_worker and self.current_worker.isRunning():
+        if self.current_worker and self.thread_pool.activeThreadCount() > 0:
             if self.debug_logger:
                 log_message = (
                     "Another archive operation is already running. "

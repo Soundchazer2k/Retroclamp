@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
 import os
 import sys
@@ -7,6 +8,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
 from pathlib import Path  # Added for modern path handling
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QWidget
 
 from core.chdman import CHDManager, CHDTask, CHDTaskType
 
@@ -24,7 +29,7 @@ PLUGIN_DESCRIPTION = "Provides batch processing capabilities for RetroClamp."
 PLUGIN_AUTHOR = "Soundchazer2k"
 
 #: List dependencies for this plugin (by module name, optional)
-PLUGIN_DEPENDENCIES = ["tools_tab"]
+PLUGIN_DEPENDENCIES: list[str] = []
 
 #: Define expected config keys and types for validation (optional)
 #: Example: {"max_workers": int, "log_level": str}
@@ -49,31 +54,19 @@ CHD operations using the core/chdman.py module.
 # Add the parent directory to the path so we can import the core modules
 
 
-def register_tab(main_window):
-    """
-    Register the Batch Processor tab with the main application window.
+def register_panel(tools_view: QWidget) -> None:
+    """Register this plugin with the Tools view.
 
-    This function is called by the plugin system to add the batch processor UI
-    as a new tab in the application's tools section. It expects the main window
-    to have a `tools_tab` attribute with a `tab_widget` (QTabWidget).
+    Batch processing is a first-class view in the sidebar and does not provide
+    an additional panel in the Tools tab.
 
     Args:
-        main_window: The main application window instance.
-    """
-    from gui.batch_tab import BatchTab
+        tools_view: The ToolsView instance (unused).
 
-    # Check if main_window has tools_tab and it has a tab_widget (QTabWidget)
-    if hasattr(main_window, "tools_tab") and hasattr(
-        main_window.tools_tab, "tab_widget"
-    ):
-        batch_tab = BatchTab(main_window.tools_tab)
-        main_window.tools_tab.tab_widget.addTab(batch_tab, "Batch Processor")
-        print("Batch Processor tab registered.")
-    else:
-        print(
-            "Could not register Batch Processor tab: tools_tab or tab_widget not "
-            "found on main_window."
-        )
+    Returns:
+        None — no panel widget is contributed.
+    """
+    return None
 
 
 def main():

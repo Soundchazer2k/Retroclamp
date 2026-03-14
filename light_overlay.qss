@@ -1,0 +1,197 @@
+/* ===================================================================
+   RetroClamp Light Theme Custom QSS Overlay
+   Applied on top of QDarkStyleSheet Light Theme
+   =================================================================== */
+
+/* 1. Light theme checkbox & radio indicators */
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #cccccc;
+    border-radius: 3px;
+    background: #ffffff;
+}
+
+QCheckBox::indicator:checked {
+    background: #0078d4;
+    border: 1px solid #0078d4;
+    image: url(resources/checkmark.svg);
+}
+
+/* 2. Light theme button states */
+QPushButton:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border: 1px solid #999999;
+}
+
+QPushButton:pressed {
+    background: #0078d4;
+    color: #ffffff;
+    border: 1px solid #0078d4;
+}
+
+/* Light theme sidebar navigation */
+QPushButton[objectName^="btn_"][selected="true"] {
+    background: transparent;
+    border-left: 4px solid #0078d4;
+    color: #0078d4;
+    padding-left: 12px;
+}
+
+QPushButton[objectName^="btn_"]:hover {
+    background: rgba(0, 120, 212, 0.1);
+    border-left: 2px solid #0078d4;
+    padding-left: 14px;
+}
+
+/* 3. Light theme progress bars & scrollbars */
+QProgressBar::chunk {
+    background: #0078d4;
+    border-radius: 2px;
+}
+
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:vertical:hover {
+    background: #0078d4;
+}
+
+/* 4. Light theme tabs */
+QTabBar::tab:selected {
+    background: #0078d4;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover {
+    background: rgba(0, 120, 212, 0.15);
+    color: #000000;
+}
+
+/* Override any specific tab widget styling */
+QTabWidget QTabBar::tab:selected {
+    background: #0078d4 !important;
+    color: #ffffff !important;
+}
+
+QTabWidget QTabBar::tab:hover {
+    background: rgba(0, 120, 212, 0.15) !important;
+}
+
+/* 5. Light theme form elements */
+QLineEdit {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #000000;
+}
+
+QLineEdit:focus {
+    border: 1px solid #0078d4;
+    background: #ffffff;
+}
+
+/* 6. Light theme groupbox styling */
+QGroupBox::title {
+    color: #0078d4;
+}
+
+/* 7. Light theme menu bar */
+QMenuBar {
+    background: #f0f0f0;
+    color: #000000;
+    border-bottom: 1px solid #cccccc;
+}
+
+QMenuBar::item:selected {
+    background: #e0e0e0;
+    border: 1px solid #cccccc;
+}
+
+QMenu {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    color: #000000;
+}
+
+QMenu::item:selected {
+    background: #0078d4;
+    color: #ffffff;
+}
+
+/* 8. Light theme table and list widgets */
+QListWidget, QTreeWidget {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    color: #000000;
+    selection-background-color: #0078d4;
+    selection-color: #ffffff;
+}
+
+QListWidget::item:hover, QTreeWidget::item:hover {
+    background: rgba(0, 120, 212, 0.3);
+}
+
+QTableWidget {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    gridline-color: #cccccc;
+    color: #000000;
+    selection-background-color: #0078d4;
+    selection-color: #ffffff;
+}
+
+QHeaderView::section {
+    background: #f0f0f0;
+    border: 1px solid #cccccc;
+    padding: 4px;
+    color: #000000;
+    font-weight: bold;
+}
+
+/* 9. Light theme combo box */
+QComboBox {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #000000;
+    min-width: 6em;
+}
+
+QComboBox:hover {
+    border: 1px solid #0078d4;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #000000;
+    width: 0px;
+    height: 0px;
+}
+
+/* 10. Light theme spin box */
+QSpinBox {
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #000000;
+}
+
+QSpinBox:hover {
+    border: 1px solid #0078d4;
+}
+
+QSpinBox:focus {
+    border: 1px solid #0078d4;
+    background: #ffffff;
+}

@@ -168,27 +168,44 @@ class BatchSignals(QObject):
     These signals are used to communicate between the batch processor and the UI.
     """
 
-    # Batch-level signals
-    started = Signal()  # Emitted when batch processing starts
-    finished = Signal()  # Emitted when all items are processed
-    paused = Signal()  # Emitted when processing is paused
-    resumed = Signal()  # Emitted when processing is resumed
-    cancelled = Signal()  # Emitted when processing is cancelled
+    # General batch lifecycle signals
+    started = Signal()  # Emitted when the batch processing starts
+    finished = (
+        Signal()
+    )  # Emitted when the entire batch processing finishes (successfully or not)
+    paused = Signal()  # Emitted when batch processing is paused
+    resumed = Signal()  # Emitted when batch processing is resumed
+    cancelled = Signal()  # Emitted when batch processing is cancelled by the user
+
+    # Overall progress and status signals
     progress_updated = Signal(
         int, int, object
-    )  # Current index, total items, time_remaining
-    error_occurred = Signal(str)  # Error message
-    state_saved = Signal(str)  # Emitted when state is saved successfully
-    state_loaded = Signal(str)  # Emitted when state is loaded successfully
+    )  # current_item_index, total_items, current_item_progress (BatchItem or dict)
+    error_occurred = Signal(str)  # Generic error message for the batch
+    state_saved = Signal(str)  # file_path where state was saved
+    state_loaded = Signal(str)  # file_path from where state was loaded
 
-    # Item-level signals
+    # Individual item signals
     item_added = Signal(object)  # BatchItem that was added
     item_started = Signal(object)  # BatchItem that started processing
-    item_progress = Signal(object, object)  # BatchItem, time_remaining
+    item_progress = Signal(
+        object, object
+    )  # BatchItem, progress_details (e.g., percentage or specific task progress)
     item_completed = Signal(object)  # BatchItem that completed successfully
-    item_failed = Signal(object, str)  # BatchItem and error message
-    item_skipped = Signal(object, str)  # BatchItem and skip reason
-    item_updated = Signal(object)  # BatchItem that was updated
+    item_failed = Signal(object, str)  # BatchItem, error_message
+    item_skipped = Signal(object, str)  # BatchItem, reason_message
+    item_updated = Signal(object)  # BatchItem whose status/details were updated
+
+    # New signals to address Mypy errors
+    item_processed = Signal(
+        object
+    )  # Emits BatchItem after it's processed (completed, failed, or skipped)
+    batch_progress = Signal(
+        float, int, int
+    )  # Overall batch: percentage, items_done, items_total
+    batch_finished = Signal(bool, str)  # Overall batch: success (bool), message (str)
+    log_message = Signal(str, str)  # message (str), level (str, e.g., 'INFO', 'ERROR')
+    cleared = Signal()  # Emitted when the batch queue is cleared
 
 
 class BatchProcessor(QObject):
@@ -537,9 +554,9 @@ class BatchProcessor(QObject):
                 return False
             self.is_paused = True
             self.signals.paused.emit()
-            # Pause the current CHD task if any
-            if self.current_task:
-                self.chd_manager.pause_task(self.current_task)
+            # Note: CHDManager does not support pausing individual tasks.
+            # The batch pause flag prevents starting new tasks; the current
+            # in-flight task will complete normally.
             debug_logger.info("core.batch_processor", "Batch processing paused")
             return True
 
@@ -593,7 +610,7 @@ class BatchProcessor(QObject):
             # Move to next item
             self.current_index += 1
             self.current_task = None
-            QTimer.singleShot(0, self._process_next)
+            QTimer.singleShot(0, self._process_next_item)
 
     @Slot(str)
     def _on_error(self, error_message: str) -> None:
@@ -682,8 +699,13 @@ class BatchProcessor(QObject):
                     force=item.overwrite,
                     user_data={"batch_index": self.current_index},
                 )
-                # Start the task
-                self.chd_manager.execute_task(self.current_task)
+                # Start the task and wire up per-task signal callbacks
+                signals, _worker = self.chd_manager.initiate_task_and_get_signals(
+                    self.current_task
+                )
+                signals.progress.connect(self._on_progress)
+                signals.finished.connect(self._on_finished)
+                signals.error.connect(self._on_error)
             except Exception as e:
                 self._fail_item(item, f"Failed to start task: {e}")
 

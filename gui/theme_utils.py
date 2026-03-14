@@ -168,7 +168,7 @@ def create_icon(icon_name: str, color: Optional[str] = None, size: int = 24) -> 
     # This is a placeholder - in a real implementation, you would load the icon
     # from your resources and apply the color if specified
     pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
+    pixmap.fill(Qt.GlobalColor.transparent)
 
     # In a real implementation, you would load and color the icon here
     # For now, we'll just return a blank icon
